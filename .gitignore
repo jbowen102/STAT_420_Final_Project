@@ -1,0 +1,37 @@
+.~*
+__pycache__/
+*.pyc
+*.out
+
+.ipynb_checkpoints/
+.Rhistory
+
+# Experimental TEST scripts
+*_TEST.py
+# Ignore any file/dir/symlink starting with TEST:
+TEST*
+
+# VS Code workspace
+*.code-workspace
+
+# Project-specific
+reference/
+source_data/
+temp/
+output/
+scratch.ods
+*.url
+*.pdf
+*.docx
+*.db
+*.png
+
+*.tar
+*.zip
+*.csv
+
+
+# Ignore any file/dir/symlink starting w/ these names:
+reference*
+
+# case-insensitive
