@@ -1,0 +1,282 @@
+---
+title: "STAT 420 - Project Proposal"
+author: "Jonathan Bowen"
+date: "2025-10-26"
+output:
+  html_document:
+    theme: readable
+    toc: true
+    highlight: zenburn
+  pdf_document:
+    toc: true
+editor_options:
+  chunk_output_type: console
+---
+
+### Intro
+The goal of my analysis is to explore how various environmental and weather factors can help predict observations of the Common Raven.  
+I plan to use a composite dataset for my project. The primary source of my data is the Cornell Lab of Ornithology's [eBird Basic Dataset](https://ebird.org/data/download/ebd), sometimes called "EBD". As described on their website, "[eBird](https://ebird.org/home) is among the world’s largest biodiversity-related science projects" and "eBird data document bird distribution, abundance, habitat use, and trends through checklist data collected within a simple, scientific framework." eBird makes available the full dataset of observations upon request. It is a ~220 GB archive that expands to a ~785 GB text file when extracted.  
+<br>  
+
+Each entry/row of the eBird dataset includes fields/columns for species of bird observed, number of individuals observed, date, time, location, and many more.  
+I am then using the [`elevatr` R package from the US EPA](https://github.com/USEPA/elevatr) to translate the eBird-observation latitude and longitude values into elevation above sea level, to serve as a more interesting numerical predictor.  
+<br>
+I am also using the [Visual Crossing API](https://www.visualcrossing.com/resources/documentation/weather-api/timeline-weather-api/) to gather weather data for each bird-observation location (lat/long) and date. Specifically, I will use the day's average temperature, total precipitation, average wind speed, and overall "conditions" (serving as a categorical predictor) in the regression. Visual Crossing allows access to the API for registered users, and a free account allows 1000 queries per day.  
+Finally, I use the [NASA Ocean Biology Processing Group's "Distance to the Nearest Coast" dataset](https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/) to associate each bird-observation location (lat/long) with distance from the nearest coast. This dataset is a text file NASA makes available for download.  
+![source: https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/](https://oceancolor.gsfc.nasa.gov/images/resources/distfromcoast/dist2coast.jpg)
+I am doing this as a solo project.  
+I started with the Common Raven because it is fairly widespread but not completely ubiquitous in the US. I may decide to change what species I'm targeting as I proceed with the project.  The below map shows the Common Raven's range in North America (source: https://www.audubon.org/field-guide/bird/common-raven):  
+![source: https://www.audubon.org/field-guide/bird/common-raven](https://media.audubon.org/nas_birdapi/Common-Raven_map.jpg)  
+<br><br>
+In summary, these will be the predictors:  
+- hour of day (extracted from observation timestamp) (numeric)  
+- elevation (numeric)  
+- distance from coast (numeric)  
+- day's avg temp (numeric)  
+- day's precipitation amount (numeric)  
+- day's avg wind speed (numeric)  
+- day's general weather "conditions" (categorical)  
+<br>
+And the response variable will be number of Common Ravens observed.
+
+The current version of the eBird Basic Dataset contains 5,656,350 observations (any bird, all time, anywhere). My choice of scope will narrow that down. For my proposal, I've chosen to predict sightings of the Common Raven in the year 2024, in my state of South Carolina (in the US), and between the hours of 06:00 and 19:00. This filtered dataset contains 293 observations.
+
+
+### Citation for eBird data use
+*eBird Basic Dataset. Version: EBD_relSep-2025. Cornell Lab of Ornithology, Ithaca, New York. Sep 2025.*
+(https://science.ebird.org/en/use-ebird-data/citation)  
+
+<br>
+
+### Setup/packages
+
+I am using the [auk](https://github.com/CornellLabofOrnithology/auk) R package to interface with the EBD dataset.  
+
+```{r, echo = FALSE}
+options(scipen = 1, digits = 2)
+```
+
+```{r, results = "hide", message = FALSE}
+library(auk)
+library(tidyverse)
+library(magrittr)
+library(httr)
+library(data.table)
+library(plotly)
+library(elevatr)
+```
+
+```{r}
+PROJECT_DIR = getwd()
+ebd_full_dir = file.path(PROJECT_DIR, "source_data", "ebd_relSep-2025")
+ebd_full_filename = "ebd_relSep-2025.txt"
+```
+
+<br><br>
+
+### eBird Data Extraction using [`auk`](https://github.com/CornellLabofOrnithology/auk)
+
+```{r, results = "hide", message = FALSE, warning = FALSE}
+f_out_full <- file.path(PROJECT_DIR, "output", "ebd_data_raven_SC_2024.txt")
+f_in_full <- file.path(ebd_full_dir, ebd_full_filename)
+ebd_filters <- auk_ebd(f_in_full) %>%
+    auk_country("United States") %>%
+    auk_state("US-SC") %>% 
+    auk_species("Common Raven") %>% 
+    auk_date(c("2024-01-01", "2025-01-01")) %>% 
+    auk_time(c("06:00", "19:00"))
+```
+
+I am not evaluating the below code in the RMarkdown because filtering the 785 GB dataset takes 2 hrs, but this is the code I used to extract my 2024 SC Common Raven observations originally:  
+
+<br>
+
+```{r, eval = FALSE}
+ebd_df <- auk_filter(ebd_filters, file = f_out_full) %>%
+    read_ebd(unique=TRUE, rollup=TRUE)
+```
+
+Since I previously used the code shown above to store my filtered data into f_out_full, I can more quickly load the data frame into RMarkdown from there:
+
+<br>
+
+```{r}
+f_in_full_already_processed = f_out_full
+ebd_df = read_ebd(f_in_full_already_processed, unique=TRUE, rollup=TRUE)
+str(ebd_df)
+```
+
+<br><br>
+
+
+### Add elevation (<span style="color:springgreen;">elevatr</span>)
+
+```{r}
+add_elev_data = function(ebd_df) {
+    ebd_df$elevation = get_elev_point(locations = data.frame(x = ebd_df$longitude, y = ebd_df$latitude), units="feet",  prj = "EPSG:4326", src = "epqs")$elevation
+    ebd_df
+}
+```
+
+```{r, eval = FALSE}
+ebd_df_with_elev = add_elev_data(ebd_df)
+```
+
+<br><br>
+
+
+### Add weather (<span style="color:blueviolet;">Visual Crossing</span>)
+
+```{r}
+VisualCrossing_key = Sys.getenv("VISUAL_CROSSING_API_KEY")
+
+get_weather_df = function(lat, long, date) {
+       base_url_with_date_and_loc = sprintf("weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/%.3f%%2C%%20%.3f/%s", lat, long, date)
+       full_weather_req_url <- list(hostname = base_url_with_date_and_loc,
+                                    scheme = "https",
+                                    query = list(unitGroup = "us",
+                                                 include = "days",
+                                                 key = VisualCrossing_key,
+                                                 contentType = "csv")) %>% 
+              setattr("class","url") %>%
+              build_url()
+       # adapted URL construction from here: https://stackoverflow.com/questions/53350738/build-an-url-with-parameters-in-r
+       (weather_df = read.csv(full_weather_req_url))
+}
+# Adapted query from example code here: https://www.visualcrossing.com/weather-query-builder/
+
+add_weather_data = function(ebd_df) {
+    weather_cols = c("temp", "precip", "windspeed", "cloudcover", "conditions")
+    # Create empty columns to hold new data
+    weather_cols_numeric = c("temp", "precip", "windspeed", "cloudcover")
+    weather_cols_str = c("conditions")
+    for (col in weather_cols_numeric) {
+        ebd_df[col] = rep(0.0, nrow(ebd_df))
+    }
+    for (col in weather_cols_str) {
+        ebd_df[col] = rep("", nrow(ebd_df))
+    }
+
+    for (x in 1:nrow(ebd_df)) {
+        weather_df = get_weather_df(ebd_df$latitude[x], ebd_df$longitude[x], ebd_df$observation_date[x])
+        for (col in weather_cols) {
+            # print(weather_df[col])
+            ebd_df[x, col] = weather_df[col]
+        }
+        Sys.sleep(0.1)
+    }
+    ebd_df
+}
+```
+
+```{r, eval = FALSE}
+ebd_df_with_elev_and_weather = add_weather_data(ebd_df_with_elev)
+```
+
+<br><br>
+
+
+### Add dist-to-coast (<span style="color:deepskyblue;">NASA</span>)
+
+```{r, eval = FALSE}
+dist_to_coast_filepath = file.path(PROJECT_DIR, "source_data", "NASA_dist2coast.txt")
+dist_to_coast_df = read.delim(dist_to_coast_filepath, header = FALSE, col.names = c("long", "lat", "dist_km"))
+head(dist_to_coast_df)
+```
+
+```{r}
+match_threshold = 0.05 # km
+
+get_dist_from_coast = function(target_lat, target_long) {
+    close_enough_lat_filter = (abs(dist_to_coast_df["lat"] - target_lat) < match_threshold)
+    close_enough_lat = dist_to_coast_df[close_enough_lat_filter,]
+    close_enough_long_filter = (abs(close_enough_lat["long"] - target_long) < match_threshold)
+    loc_matches = close_enough_lat[close_enough_long_filter,]
+    # If >1 match, take average distance
+    mean(loc_matches[["dist_km"]])
+}
+
+add_dist_to_coast = function(ebd_df) {
+    ebd_df["dist_to_coast_mi"] = rep(0.0, nrow(ebd_df))
+    for (x in 1:nrow(ebd_df)) {
+        weather_df = get_weather_df(ebd_df$latitude[x], ebd_df$longitude[x], ebd_df$observation_date[x])
+        ebd_df[x, "dist_to_coast_mi"] = -round(0.62137 * get_dist_from_coast(target_lat = ebd_df$latitude, target_long = ebd_df$longitude), 3)
+    }
+    ebd_df
+}
+```
+
+
+```{r, eval = FALSE}
+ebd_df_with_elev_and_weather_and_dist_to_coast = add_dist_to_coast(ebd_df_with_elev_and_weather)
+head(ebd_df_with_elev_and_weather_and_dist_to_coast)
+```
+
+<br><br>
+
+### Extract hour of day
+
+```{r, eval = FALSE}
+ebd_df_with_elev_and_weather_and_dist_to_coast["hour_of_day"] = rep(0, nrow(ebd_df_with_elev_and_weather_and_dist_to_coast))
+for (x in 1:nrow(ebd_df_with_elev_and_weather_and_dist_to_coast)) {
+    ebd_df_with_elev_and_weather_and_dist_to_coast[x, "hour_of_day"] = as.integer(str_split(ebd_df_with_elev_and_weather_and_dist_to_coast[[x, "time_observations_started"]], ":")[[1]][1])
+}
+```
+
+<br><br>
+
+
+### Project columns
+
+```{r, eval = FALSE}
+(total_df = ebd_df_with_elev_and_weather_and_dist_to_coast[c("global_unique_identifier",
+                                                             "common_name",
+                                                             "observation_count",
+                                                             "county",
+                                                             "latitude",
+                                                             "longitude",
+                                                             "observation_date",
+                                                             "hour_of_day",
+                                                             "elevation",
+                                                             "temp",
+                                                             "precip",
+                                                             "windspeed",
+                                                             "cloudcover",
+                                                             "conditions",
+                                                             "dist_to_coast_mi")])
+```
+
+<br><br>
+
+
+Here is what the dataset looks like, with predictors in light blue and the response variable in green:  
+![](./output/raven_dataset_sample.png)
+
+<br><br>
+Just for reference:
+
+```{r}
+predictor_cols = c("hour_of_day",
+                   "elevation",
+                   "dist_to_coast_mi",
+                   "temp",
+                   "precip",
+                   "windspeed",
+                   "conditions")
+response_col = "observation_count"
+```
+
+
+<br><br>
+
+
+
+
+
+
+
+
+
+
+
+
