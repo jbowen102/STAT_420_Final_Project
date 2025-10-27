@@ -39,8 +39,9 @@ In summary, these will be the predictors:
 <br>
 And the response variable will be number of Common Ravens observed.
 
-The current version of the eBird Basic Dataset contains 5,656,350 observations (any bird, all time, anywhere). My choice of scope will narrow that down. For my proposal, I've chosen to predict sightings of the Common Raven in the year 2024, in my state of South Carolina (in the US), and between the hours of 06:00 and 19:00. This filtered dataset contains 293 observations.
+The current version of the eBird Basic Dataset contains 5,656,350 observations (any bird, all time, anywhere). My choice of scope will narrow that down. For my proposal, I've chosen to predict sightings of the Common Raven in the year 2024, in my state of South Carolina (in the US), and between the hours of 06:00 and 19:00. This filtered dataset contains 293 observations.  
 
+<br>
 
 ### Citation for eBird data use
 *eBird Basic Dataset. Version: EBD_relSep-2025. Cornell Lab of Ornithology, Ithaca, New York. Sep 2025.*
@@ -87,18 +88,17 @@ ebd_filters <- auk_ebd(f_in_full) %>%
     auk_time(c("06:00", "19:00"))
 ```
 
+<br>
 I am not evaluating the below code in the RMarkdown because filtering the 785 GB dataset takes 2 hrs, but this is the code I used to extract my 2024 SC Common Raven observations originally:  
 
-<br>
 
 ```{r, eval = FALSE}
 ebd_df <- auk_filter(ebd_filters, file = f_out_full) %>%
     read_ebd(unique=TRUE, rollup=TRUE)
 ```
 
-Since I previously used the code shown above to store my filtered data into f_out_full, I can more quickly load the data frame into RMarkdown from there:
-
 <br>
+Since I previously used the code shown above to store my filtered data into f_out_full, I can more quickly load the data frame into RMarkdown from there:
 
 ```{r}
 f_in_full_already_processed = f_out_full
@@ -118,7 +118,7 @@ add_elev_data = function(ebd_df) {
 }
 ```
 
-```{r, eval = FALSE}
+```{r, message = FALSE, warning = FALSE}
 ebd_df_with_elev = add_elev_data(ebd_df)
 ```
 
@@ -169,7 +169,7 @@ add_weather_data = function(ebd_df) {
 }
 ```
 
-```{r, eval = FALSE}
+```{r}
 ebd_df_with_elev_and_weather = add_weather_data(ebd_df_with_elev)
 ```
 
@@ -178,10 +178,9 @@ ebd_df_with_elev_and_weather = add_weather_data(ebd_df_with_elev)
 
 ### Add dist-to-coast (<span style="color:deepskyblue;">NASA</span>)
 
-```{r, eval = FALSE}
+```{r}
 dist_to_coast_filepath = file.path(PROJECT_DIR, "source_data", "NASA_dist2coast.txt")
 dist_to_coast_df = read.delim(dist_to_coast_filepath, header = FALSE, col.names = c("long", "lat", "dist_km"))
-head(dist_to_coast_df)
 ```
 
 ```{r}
@@ -207,7 +206,7 @@ add_dist_to_coast = function(ebd_df) {
 ```
 
 
-```{r, eval = FALSE}
+```{r}
 ebd_df_with_elev_and_weather_and_dist_to_coast = add_dist_to_coast(ebd_df_with_elev_and_weather)
 head(ebd_df_with_elev_and_weather_and_dist_to_coast)
 ```
@@ -216,7 +215,7 @@ head(ebd_df_with_elev_and_weather_and_dist_to_coast)
 
 ### Extract hour of day
 
-```{r, eval = FALSE}
+```{r}
 ebd_df_with_elev_and_weather_and_dist_to_coast["hour_of_day"] = rep(0, nrow(ebd_df_with_elev_and_weather_and_dist_to_coast))
 for (x in 1:nrow(ebd_df_with_elev_and_weather_and_dist_to_coast)) {
     ebd_df_with_elev_and_weather_and_dist_to_coast[x, "hour_of_day"] = as.integer(str_split(ebd_df_with_elev_and_weather_and_dist_to_coast[[x, "time_observations_started"]], ":")[[1]][1])
@@ -228,7 +227,7 @@ for (x in 1:nrow(ebd_df_with_elev_and_weather_and_dist_to_coast)) {
 
 ### Project columns
 
-```{r, eval = FALSE}
+```{r}
 (total_df = ebd_df_with_elev_and_weather_and_dist_to_coast[c("global_unique_identifier",
                                                              "common_name",
                                                              "observation_count",
@@ -249,7 +248,8 @@ for (x in 1:nrow(ebd_df_with_elev_and_weather_and_dist_to_coast)) {
 <br><br>
 
 
-Here is what the dataset looks like, with predictors in light blue and the response variable in green:  
+Here is what the total dataset looks like, with predictors in light blue and the response variable in green:  
+
 ![](./output/raven_dataset_sample.png)
 
 <br><br>
