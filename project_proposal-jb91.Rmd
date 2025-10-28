@@ -23,19 +23,22 @@ I am then using the [`elevatr` R package from the US EPA](https://github.com/USE
 <br>
 I am also using the [Visual Crossing API](https://www.visualcrossing.com/resources/documentation/weather-api/timeline-weather-api/) to gather weather data for each bird-observation location (lat/long) and date. Specifically, I will use the day's average temperature, total precipitation, average wind speed, and overall "conditions" (serving as a categorical predictor) in the regression. Visual Crossing allows access to the API for registered users, and a free account allows 1000 queries per day.  
 Finally, I use the [NASA Ocean Biology Processing Group's "Distance to the Nearest Coast" dataset](https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/) to associate each bird-observation location (lat/long) with distance from the nearest coast. This dataset is a text file NASA makes available for download.  
+
 ![source: https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/](https://oceancolor.gsfc.nasa.gov/images/resources/distfromcoast/dist2coast.jpg)
+<br>
 I am doing this as a solo project.  
 I started with the Common Raven because it is fairly widespread but not completely ubiquitous in the US. I may decide to change what species I'm targeting as I proceed with the project.  The below map shows the Common Raven's range in North America (source: https://www.audubon.org/field-guide/bird/common-raven):  
 ![source: https://www.audubon.org/field-guide/bird/common-raven](https://media.audubon.org/nas_birdapi/Common-Raven_map.jpg)  
+
 <br><br>
 In summary, these will be the predictors:  
-- hour of day (extracted from observation timestamp) (numeric)  
-- elevation (numeric)  
-- distance from coast (numeric)  
-- day's avg temp (numeric)  
-- day's precipitation amount (numeric)  
-- day's avg wind speed (numeric)  
-- day's general weather "conditions" (categorical)  
+- hour of day (extracted from observation timestamp) (numeric)
+- elevation (numeric)
+- distance from coast (numeric)
+- day's avg temp (numeric)
+- day's precipitation amount (numeric)
+- day's avg wind speed (numeric)
+- day's general weather "conditions" (categorical)
 <br>
 And the response variable will be number of Common Ravens observed.
 
@@ -77,7 +80,7 @@ ebd_full_filename = "ebd_relSep-2025.txt"
 
 ### eBird Data Extraction using [`auk`](https://github.com/CornellLabofOrnithology/auk)
 
-```{r, results = "hide", message = FALSE, warning = FALSE}
+```{r, eBird_filters, results = "hide", message = FALSE, warning = FALSE}
 f_out_full <- file.path(PROJECT_DIR, "output", "ebd_data_raven_SC_2024.txt")
 f_in_full <- file.path(ebd_full_dir, ebd_full_filename)
 ebd_filters <- auk_ebd(f_in_full) %>%
@@ -92,7 +95,7 @@ ebd_filters <- auk_ebd(f_in_full) %>%
 I am not evaluating the below code in the RMarkdown because filtering the 785 GB dataset takes 2 hrs, but this is the code I used to extract my 2024 SC Common Raven observations originally:  
 
 
-```{r, eval = FALSE}
+```{r, eBird_extract, eval = FALSE}
 ebd_df <- auk_filter(ebd_filters, file = f_out_full) %>%
     read_ebd(unique=TRUE, rollup=TRUE)
 ```
@@ -100,7 +103,7 @@ ebd_df <- auk_filter(ebd_filters, file = f_out_full) %>%
 <br>
 Since I previously used the code shown above to store my filtered data into f_out_full, I can more quickly load the data frame into RMarkdown from there:
 
-```{r}
+```{r, eBird_read}
 f_in_full_already_processed = f_out_full
 ebd_df = read_ebd(f_in_full_already_processed, unique=TRUE, rollup=TRUE)
 str(ebd_df)
@@ -108,6 +111,11 @@ str(ebd_df)
 
 <br><br>
 
+Here are the observation locations plotted on a map of the state:  
+
+![](./output/ebd_data_raven_SC_2024.png)
+
+<br>
 
 ### Add elevation (<span style="color:springgreen;">elevatr</span>)
 
@@ -118,7 +126,7 @@ add_elev_data = function(ebd_df) {
 }
 ```
 
-```{r, message = FALSE, warning = FALSE}
+```{r, add_elevatr_data, message = FALSE, warning = FALSE}
 ebd_df_with_elev = add_elev_data(ebd_df)
 ```
 
@@ -158,7 +166,7 @@ add_weather_data = function(ebd_df) {
     }
 
     for (x in 1:nrow(ebd_df)) {
-        weather_df = get_weather_df(ebd_df$latitude[x], ebd_df$longitude[x], ebd_df$observation_date[x])
+        weather_df = get_weather_df(ebd_df[x, "latitude"], ebd_df[x, "longitude"], ebd_df[x, "observation_date"])
         for (col in weather_cols) {
             # print(weather_df[col])
             ebd_df[x, col] = weather_df[col]
@@ -169,7 +177,7 @@ add_weather_data = function(ebd_df) {
 }
 ```
 
-```{r}
+```{r, add_weather_data}
 ebd_df_with_elev_and_weather = add_weather_data(ebd_df_with_elev)
 ```
 
@@ -178,7 +186,7 @@ ebd_df_with_elev_and_weather = add_weather_data(ebd_df_with_elev)
 
 ### Add dist-to-coast (<span style="color:deepskyblue;">NASA</span>)
 
-```{r}
+```{r, read_dist_to_coast_dataset}
 dist_to_coast_filepath = file.path(PROJECT_DIR, "source_data", "NASA_dist2coast.txt")
 dist_to_coast_df = read.delim(dist_to_coast_filepath, header = FALSE, col.names = c("long", "lat", "dist_km"))
 ```
@@ -198,17 +206,22 @@ get_dist_from_coast = function(target_lat, target_long) {
 add_dist_to_coast = function(ebd_df) {
     ebd_df["dist_to_coast_mi"] = rep(0.0, nrow(ebd_df))
     for (x in 1:nrow(ebd_df)) {
-        weather_df = get_weather_df(ebd_df$latitude[x], ebd_df$longitude[x], ebd_df$observation_date[x])
-        ebd_df[x, "dist_to_coast_mi"] = -round(0.62137 * get_dist_from_coast(target_lat = ebd_df$latitude, target_long = ebd_df$longitude), 3)
+        ebd_df[x, "dist_to_coast_mi"] = -round(0.62137 * get_dist_from_coast(ebd_df[[x, "latitude"]], ebd_df[[x, "longitude"]]), 3)
     }
     ebd_df
 }
 ```
 
 
-```{r}
+```{r, add_dist_to_coast}
 ebd_df_with_elev_and_weather_and_dist_to_coast = add_dist_to_coast(ebd_df_with_elev_and_weather)
-head(ebd_df_with_elev_and_weather_and_dist_to_coast)
+head(ebd_df_with_elev_and_weather_and_dist_to_coast[c("global_unique_identifier",
+                                                      "observation_count",
+                                                      "latitude",
+                                                      "longitude",
+                                                      "observation_date",
+                                                      "elevation",
+                                                      "dist_to_coast_mi")])
 ```
 
 <br><br>
@@ -228,21 +241,21 @@ for (x in 1:nrow(ebd_df_with_elev_and_weather_and_dist_to_coast)) {
 ### Project columns
 
 ```{r}
-(total_df = ebd_df_with_elev_and_weather_and_dist_to_coast[c("global_unique_identifier",
-                                                             "common_name",
-                                                             "observation_count",
-                                                             "county",
-                                                             "latitude",
-                                                             "longitude",
-                                                             "observation_date",
-                                                             "hour_of_day",
-                                                             "elevation",
-                                                             "temp",
-                                                             "precip",
-                                                             "windspeed",
-                                                             "cloudcover",
-                                                             "conditions",
-                                                             "dist_to_coast_mi")])
+total_df = ebd_df_with_elev_and_weather_and_dist_to_coast[c("global_unique_identifier",
+                                                            "common_name",
+                                                            "observation_count",
+                                                            "county",
+                                                            "latitude",
+                                                            "longitude",
+                                                            "observation_date",
+                                                            "hour_of_day",
+                                                            "elevation",
+                                                            "temp",
+                                                            "precip",
+                                                            "windspeed",
+                                                            "cloudcover",
+                                                            "conditions",
+                                                            "dist_to_coast_mi")]
 ```
 
 <br><br>
