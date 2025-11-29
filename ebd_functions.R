@@ -8,11 +8,53 @@ library(plotly)
 library(elevatr)
 
 
+elevation_data_buffer = read_csv(elevation_data_path)
+
+get_elev_from_buffer = function(target_lat, target_long) {
+    # pull from local file (faster)
+    tol = 0.001 # ~400 ft.
+    results = elevation_data_buffer[abs(elevation_data_buffer$cell_ctr_lat - target_lat) < tol & abs(elevation_data_buffer$cell_ctr_lon - target_long) < tol,]
+    if (nrow(results) > 1) {
+        results[sample(nrow(elevation_data_buffer), 1),]
+    } else {
+        results
+    }
+}
+
+query_elev = function(lat, long) {
+    # Use API (slower)
+    get_elev_point(locations = data.frame(x = long, y = lat), units="feet",  prj = "EPSG:4326", src = "epqs")$elevation
+}
+
+get_elev = function(target_lat, target_long) {
+    # first try to get from already-downloaded data
+    buffer_result = get_elev_from_buffer(target_lat, target_long)
+    if (nrow(buffer_result) == 0) {
+        query_elev(target_lat, target_long)
+    } else {
+        buffer_result[["elevation"]]
+    }
+}
+
 add_elev_data = function(ebd_df) {
-    ebd_df$elevation = get_elev_point(locations = data.frame(x = ebd_df[["longitude"]], y = ebd_df$latitude), units="feet",  prj = "EPSG:4326", src = "epqs")$elevation
+    lat_col = "cell_ctr_lat"
+    lon_col = "cell_ctr_lon"
+    for (row in 1:nrow(ebd_df)) {
+        # print(row)
+        # print(ebd_df[row,])
+        # print(ebd_df[row, lat_col])
+        # print(ebd_df[row, lon_col])
+        ebd_df[row, "elevation"] = get_elev(ebd_df[[row, lat_col]], ebd_df[[row, lon_col]])
+    }
     ebd_df
 }
 # https://github.com/USEPA/elevatr/issues/96
+
+write_elev_local_file = function(df_with_elev_col) {
+    elevation_local_data_path = file.path(PROJECT_DIR, "reference", "elev_data.csv")
+    df_to_write = df_with_elev_col[!is.na(df_with_elev_col$elevation), c("cell_ctr_lat", "cell_ctr_lon", "elevation")]
+    write_csv(df_to_write, elevation_local_data_path)
+}
 
 
 # Download weather data with Visual Crossing API. Adapted from example code here: https://www.visualcrossing.com/weather-query-builder/
@@ -73,9 +115,11 @@ get_dist_from_coast = function(dist_to_coast_df, target_lat, target_long, match_
 }
 
 add_dist_to_coast = function(dist_to_coast_df, ebd_df) {
+    lat_col = "latitude"
+    lon_col = "longitude"
     ebd_df["dist_to_coast_mi"] = rep(0.0, nrow(ebd_df))
     for (x in 1:nrow(ebd_df)) {
-        ebd_df[x, "dist_to_coast_mi"] = -round(0.62137 * get_dist_from_coast(dist_to_coast_df, ebd_df[[x, "latitude"]], ebd_df[[x, "longitude"]]), 3)
+        ebd_df[x, "dist_to_coast_mi"] = -round(0.62137 * get_dist_from_coast(dist_to_coast_df, ebd_df[[x, lat_col]], ebd_df[[x, lon_col]]), 3)
     }
     ebd_df
 }
