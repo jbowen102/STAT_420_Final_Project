@@ -82,3 +82,23 @@ add_dominant_eco_group = function (df) {
     df_out
     # ChatGPT helped me generate some of this.
 }
+
+
+get_land_cover_props_per_hex = function(nlcd_rast, hex_spatvector) {
+    # Get proportions of land cover categories per hex
+    summary_function = function(x, ...) {
+        t <- table(factor(x, levels=nlcd_codes))
+        t / sum(t)
+    }
+
+    hex_props <- extract(nlcd_rast, hex_spatvector, fun=summary_function, df=TRUE)
+    # Now convert to data.frame
+    hex_props_df <- as.data.frame(hex_props)
+    # Rename the NLCD fraction columns according to nlcd_codes
+    nlcd_col_indices <- 2:(length(nlcd_codes)+1)  # assuming first column is ID
+    names(hex_props_df)[nlcd_col_indices] <- as.character(nlcd_codes)
+    names(hex_props_df)[1] <- "cell"
+    hex_props_df$cell <- hex_spatvector$cell # Get back original cell IDs (order was preserved)
+    hex_props_df
+    # ChatGPT helped me generate this.
+}
