@@ -1,6 +1,3 @@
-PROJECT_DIR = getwd()
-smpl_dir = file.path(PROJECT_DIR, "source_data", "ebd-datafile-SAMPLE")
-
 
 nlcd_codes <- c(
   11,           # Open Water
@@ -35,6 +32,7 @@ nlcd_classes <- c(
 
 
 # Create SpatRaster object
+PROJECT_DIR = getwd()
 mrlc_land_cover_path = file.path(PROJECT_DIR, "source_data", "NLCD_miktswn9by8d20", "Annual_NLCD_LndCov_2024_CU_C1V1_miktswn9by8d20.tiff")
 nlcd <- rast(mrlc_land_cover_path) %>%
     as.factor()
@@ -150,5 +148,21 @@ add_dominant_eco_group = function (hex_props_grouped) {
         function(row) prop_cols[which.max(row)]
     )
     hex_props_grouped
+    # ChatGPT helped me write this.
+}
+
+
+add_all_land_cover_covariates = function (main_df, hex_spatvector) {
+    # Now join with main eBird data.frame
+    hex_props_grouped <- get_land_cover_props_per_hex(nlcd, hex_spatvector) %>%
+        add_dominant_lc() %>%
+        add_eco_group_props() %>%
+        add_dominant_eco_group()
+    main_df <- left_join(
+        main_df,
+        hex_props_grouped,
+        by = "cell"
+    )
+    main_df
     # ChatGPT helped me write this.
 }
