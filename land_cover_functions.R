@@ -53,7 +53,32 @@ get_land_cover_classes_point = function (df, lon_col_name="cell_ctr_lon", lat_co
     # Add column w/ class description
     hex_coord_nlcd_classes$desc <- nlcd_classes[as.character(nlcd_pixels[,2])]
     hex_coord_nlcd_classes
-    # ChatGPT helped me generate this.
+    # ChatGPT helped me generate some of this.
 }
 
+add_land_cover_classes_point = function (df) {
+    hex_coord_nlcd_classes = get_land_cover_classes_point(df)
+    df["nlcd_class"] = hex_coord_nlcd_classes["NLCD Land Cover Class"]
+    df["nlcd_class_desc"] = hex_coord_nlcd_classes["desc"]
+    df
+}
 
+add_dominant_eco_group = function (df) {
+    # Assumes column w/ class code is named "nlcd_class"
+    df_out <- df %>%
+    mutate(
+        # Main ecological-group mapping
+        land_cvr_group = case_when(
+            nlcd_class %in% c(41, 42, 43)  ~ "Forest",
+            nlcd_class %in% c(81, 82)      ~ "Agriculture",
+            nlcd_class == 71               ~ "Grassland",
+            nlcd_class %in% c(90, 95)      ~ "Wetland",
+            nlcd_class == 11               ~ "Water",
+            nlcd_class %in% c(21,22,23,24) ~ "Developed",
+            nlcd_class %in% c(31,52)       ~ "Shrubland",
+            TRUE                           ~ NA_character_
+        )
+    )
+    df_out
+    # ChatGPT helped me generate some of this.
+}
