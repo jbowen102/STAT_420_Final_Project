@@ -137,4 +137,18 @@ add_eco_group_props = function (hex_props_df) {
     hex_props_grouped
 }
 
-
+add_dominant_eco_group = function (hex_props_grouped) {
+    # Add dominant ecological grouping of related NLCD land-cover codes
+    prop_cols <- c(
+        "Forest", "Agriculture", "Grassland",
+        "Wetland", "Water", "Developed", "Shrubland"
+    )
+    # For each row, get the name of the column with the maximum value
+    hex_props_grouped$dominant_eco_group <- apply(
+        hex_props_grouped[, prop_cols],
+        1,
+        function(row) prop_cols[which.max(row)]
+    )
+    hex_props_grouped
+    # ChatGPT helped me write this.
+}
