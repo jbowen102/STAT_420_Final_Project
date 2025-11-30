@@ -8,10 +8,13 @@ library(plotly)
 library(elevatr)
 
 
+PROJECT_DIR = getwd()
+elevation_data_path = file.path(PROJECT_DIR, "reference", "elev_data.csv")
 elevation_data_buffer = read_csv(elevation_data_path)
 
 get_elev_from_buffer = function(target_lat, target_long) {
     # pull from local file (faster)
+    # Returns data.frame
     tol = 0.001 # ~400 ft.
     results = elevation_data_buffer[abs(elevation_data_buffer$cell_ctr_lat - target_lat) < tol & abs(elevation_data_buffer$cell_ctr_lon - target_long) < tol,]
     if (nrow(results) > 1) {
@@ -30,21 +33,19 @@ get_elev = function(target_lat, target_long) {
     # first try to get from already-downloaded data
     buffer_result = get_elev_from_buffer(target_lat, target_long)
     if (nrow(buffer_result) == 0) {
+        # otherwise query API
         query_elev(target_lat, target_long)
     } else {
-        buffer_result[["elevation"]]
+        buffer_result[["elevation_ft"]]
     }
 }
 
 add_elev_data = function(ebd_df) {
     lat_col = "cell_ctr_lat"
     lon_col = "cell_ctr_lon"
+    ebd_df["elevation_ft"] = rep(NA, nrow(ebd_df))
     for (row in 1:nrow(ebd_df)) {
-        # print(row)
-        # print(ebd_df[row,])
-        # print(ebd_df[row, lat_col])
-        # print(ebd_df[row, lon_col])
-        ebd_df[row, "elevation"] = get_elev(ebd_df[[row, lat_col]], ebd_df[[row, lon_col]])
+        ebd_df[row, "elevation_ft"] = get_elev(ebd_df[[row, lat_col]], ebd_df[[row, lon_col]])
     }
     ebd_df
 }
@@ -52,7 +53,7 @@ add_elev_data = function(ebd_df) {
 
 write_elev_local_file = function(df_with_elev_col) {
     elevation_local_data_path = file.path(PROJECT_DIR, "reference", "elev_data.csv")
-    df_to_write = df_with_elev_col[!is.na(df_with_elev_col$elevation), c("cell_ctr_lat", "cell_ctr_lon", "elevation")]
+    df_to_write = df_with_elev_col[!is.na(df_with_elev_col$elevation_ft), c("cell_ctr_lat", "cell_ctr_lon", "elevation_ft")]
     write_csv(df_to_write, elevation_local_data_path)
 }
 
