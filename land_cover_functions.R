@@ -1,3 +1,5 @@
+library(terra)
+
 
 nlcd_codes <- c(
   11,           # Open Water
@@ -31,9 +33,9 @@ nlcd_classes <- c(
 )
 
 
-# Create SpatRaster object
 PROJECT_DIR = getwd()
 mrlc_land_cover_path = file.path(PROJECT_DIR, "source_data", "NLCD_miktswn9by8d20", "Annual_NLCD_LndCov_2024_CU_C1V1_miktswn9by8d20.tiff")
+# Create SpatRaster object
 nlcd <- rast(mrlc_land_cover_path) %>%
     as.factor()
 # levels(nlcd)  # shows category names
@@ -42,7 +44,7 @@ nlcd <- rast(mrlc_land_cover_path) %>%
 
 get_land_cover_classes_point = function (df, lon_col_name="cell_ctr_lon", lat_col_name="cell_ctr_lat") {
     hex_coords <- vect(df, geom = c(lon_col_name, lat_col_name), crs = "EPSG:4326")
-    hex_coord_nlcd_classes <- extract(nlcd, hex_coords) # Extract pixel values
+    hex_coord_nlcd_classes <- terra::extract(nlcd, hex_coords) # Extract pixel values
     # Yields df w/ "NLCD Land Cover Class" column containing class id
     
     # Rename ID column to "cell"
@@ -90,7 +92,7 @@ get_land_cover_props_per_hex = function(nlcd_rast, hex_spatvector) {
         t / sum(t)
     }
 
-    hex_props <- extract(nlcd_rast, hex_spatvector, fun=summary_function, df=TRUE)
+    hex_props <- terra::extract(nlcd_rast, hex_spatvector, fun=summary_function, df=TRUE)
     # Now convert to data.frame
     hex_props_df <- as.data.frame(hex_props)
     # Rename the NLCD fraction columns according to nlcd_codes
