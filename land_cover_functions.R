@@ -2,13 +2,6 @@ PROJECT_DIR = getwd()
 smpl_dir = file.path(PROJECT_DIR, "source_data", "ebd-datafile-SAMPLE")
 
 
-# Create SpatRaster object
-mrlc_land_cover_path = file.path(PROJECT_DIR, "source_data", "NLCD_miktswn9by8d20", "Annual_NLCD_LndCov_2024_CU_C1V1_miktswn9by8d20.tiff")
-nlcd <- rast(mrlc_land_cover_path) %>%
-    as.factor()
-# levels(nlcd)  # shows category names
-# plot(nlcd)
-
 nlcd_codes <- c(
   11,           # Open Water
   21,22,23,24,  # Developed
@@ -41,6 +34,14 @@ nlcd_classes <- c(
 )
 
 
+# Create SpatRaster object
+mrlc_land_cover_path = file.path(PROJECT_DIR, "source_data", "NLCD_miktswn9by8d20", "Annual_NLCD_LndCov_2024_CU_C1V1_miktswn9by8d20.tiff")
+nlcd <- rast(mrlc_land_cover_path) %>%
+    as.factor()
+# levels(nlcd)  # shows category names
+# plot(nlcd)
+
+
 get_land_cover_classes_point = function (df, lon_col_name="cell_ctr_lon", lat_col_name="cell_ctr_lat") {
     hex_coords <- vect(df, geom = c(lon_col_name, lat_col_name), crs = "EPSG:4326")
     hex_coord_nlcd_classes <- extract(nlcd, hex_coords) # Extract pixel values
@@ -63,7 +64,7 @@ add_land_cover_classes_point = function (df) {
     df
 }
 
-add_dominant_eco_group = function (df) {
+add_eco_group = function (df) {
     # Assumes column w/ class code is named "nlcd_class"
     df_out <- df %>%
     mutate(
@@ -102,3 +103,38 @@ get_land_cover_props_per_hex = function(nlcd_rast, hex_spatvector) {
     hex_props_df
     # ChatGPT helped me generate this.
 }
+
+add_dominant_lc = function (hex_props_df) {
+    # Add dominant NLCD land-cover code, description
+    nlcd_col_indices <- 2:(length(nlcd_codes)+1)  # assuming first column is ID
+    hex_props_df$dominant_nlcd_code <- apply(
+        hex_props_df[, nlcd_col_indices],
+        1,
+        function(row) nlcd_codes[which.max(row)]
+    )
+    hex_props_df$dominant_nlcd_desc <- nlcd_classes[as.character(hex_props_df$dominant_nlcd_code)]
+    hex_props_df
+    # ChatGPT helped me write this.
+}
+
+add_eco_group_props = function (hex_props_df) {
+    # Add eco group proportions. Also prefix nlcd class-code columns
+    hex_props_grouped <- hex_props_df %>%
+        mutate(
+            Forest      = `41` + `42` + `43`,
+            Agriculture = `81` + `82`,
+            Grassland   = `71`,
+            Wetland     = `90` + `95`,
+            Water       = `11`,
+            Developed   = `21` + `22` + `23` + `24`,
+            Shrubland   = `31` + `52`
+        )
+
+    # Add prefix to column names
+    nlcd_cols <- paste0("nlcd_", nlcd_codes)
+    colnames(hex_props_grouped)[2:(length(nlcd_codes)+1)] <- nlcd_cols
+    # ChatGPT helped me write this.
+    hex_props_grouped
+}
+
+
