@@ -111,8 +111,10 @@ add_dominant_lc = function (hex_props_df) {
         hex_props_df[, nlcd_col_indices],
         1,
         function(row) nlcd_codes[which.max(row)]
-    )
-    hex_props_df$dominant_nlcd_desc <- nlcd_classes[as.character(hex_props_df$dominant_nlcd_code)]
+        ) %>%
+        as.factor()
+    hex_props_df$dominant_nlcd_desc <- nlcd_classes[as.character(hex_props_df$dominant_nlcd_code)] %>%
+        as.factor()
     hex_props_df
     # ChatGPT helped me write this.
 }
@@ -148,7 +150,8 @@ add_dominant_eco_group = function (hex_props_grouped) {
         hex_props_grouped[, prop_cols],
         1,
         function(row) prop_cols[which.max(row)]
-    )
+        ) %>%
+        as.factor()
     hex_props_grouped
     # ChatGPT helped me write this.
 }
