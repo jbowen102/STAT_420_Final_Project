@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.out
 
+.lintr.R
 .ipynb_checkpoints/
 .Rhistory
 
