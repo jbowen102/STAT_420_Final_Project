@@ -1,4 +1,4 @@
-library(terra)
+suppressPackageStartupMessages(library(terra))
 
 
 nlcd_codes <- c(
@@ -36,6 +36,7 @@ nlcd_classes <- c(
 PROJECT_DIR = getwd()
 mrlc_land_cover_path = file.path(PROJECT_DIR, "source_data", "NLCD_miktswn9by8d20", "Annual_NLCD_LndCov_2024_CU_C1V1_miktswn9by8d20.tiff")
 # Create SpatRaster object
+print("Reading in MRLC land-cover raster")
 nlcd <- rast(mrlc_land_cover_path) %>%
     as.factor()
 # levels(nlcd)  # shows category names
@@ -106,6 +107,7 @@ get_land_cover_props_per_hex = function(nlcd_rast, hex_spatvector) {
 
 add_dominant_lc = function (hex_props_df) {
     # Add dominant NLCD land-cover code, description
+    print("Finding dominant land-cover class")
     nlcd_col_indices <- 2:(length(nlcd_codes)+1)  # assuming first column is ID
     hex_props_df$dominant_nlcd_code <- apply(
         hex_props_df[, nlcd_col_indices],
@@ -145,6 +147,7 @@ add_dominant_eco_group = function (hex_props_grouped) {
         "Forest", "Agriculture", "Grassland",
         "Wetland", "Water", "Developed", "Shrubland"
     )
+    print("Finding dominant ecological group")
     # For each row, get the name of the column with the maximum value
     hex_props_grouped$dominant_eco_group <- apply(
         hex_props_grouped[, prop_cols],

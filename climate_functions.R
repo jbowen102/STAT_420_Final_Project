@@ -1,14 +1,38 @@
-library(terra)
+suppressPackageStartupMessages(library(prism))
+suppressPackageStartupMessages(library(terra))
 
 PROJECT_DIR = getwd()
+prism_dir = file.path(PROJECT_DIR, "source_data", "PRISM_data")
+
 
 # Load files as terra rasters
 tmean_ras_path <- file.path(prism_dir, "prism_tmean_us_25m_2024", "prism_tmean_us_25m_2024.bil")
+print("Reading in PRISM Tmean raster")
 tmean_r <- rast(tmean_ras_path)
 
 ppt_ras_path <- file.path(prism_dir, "prism_ppt_us_25m_2024", "prism_ppt_us_25m_2024.bil")
+print("Reading in PRISM precip raster")
 ppt_r <- rast(ppt_ras_path)
 
+
+# Download PRISM data (weather covariates)
+download_prism_data = function() {
+    prism_set_dl_dir(prism_dir)
+    # Annual mean temperature
+    get_prism_annual(
+      type = "tmean",
+      years = 2024,
+      resolution = "4km"
+    )
+
+    # Annual precipitation
+    get_prism_annual(
+      type = "ppt",
+      years = 2024,
+      resolution = "4km"
+    )
+}
+# download_prism_data()
 
 get_tmean_per_hex = function(hex_spatvector) {
     # Extract 2024 temperature + precipitation

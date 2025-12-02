@@ -1,16 +1,28 @@
-library(auk)
-library(tidyverse)
+suppressPackageStartupMessages(library(auk))
+suppressPackageStartupMessages(library(tidyverse))
 
-library(magrittr)
-library(httr)
-library(data.table)
-library(plotly)
-library(elevatr)
+suppressPackageStartupMessages(library(magrittr))
+suppressPackageStartupMessages(library(httr))
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(plotly))
+suppressPackageStartupMessages(library(elevatr))
 
 
 PROJECT_DIR = getwd()
 elevation_data_path = file.path(PROJECT_DIR, "reference", "elev_data.csv")
-elevation_data_buffer = read_csv(elevation_data_path)
+print("Reading in elevation-data buffer")
+elevation_data_buffer = read_csv(elevation_data_path, show_col_types = FALSE)
+
+dist_to_coast_path <- file.path(PROJECT_DIR, "source_data", "NASA_dist2coast.txt")
+
+read_in_dist_to_coast_data = function(filepath) {
+    # https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/
+    read.delim(filepath, header = FALSE, col.names = c("long", "lat", "dist_km"))
+}
+print("Reading in distance-to-coast data")
+dist_to_coast_df = read_in_dist_to_coast_data(dist_to_coast_path)
+
+
 
 get_elev_from_buffer = function(target_lat, target_long) {
     # pull from local file (faster)
@@ -100,12 +112,8 @@ add_weather_data = function(ebd_df) {
 }
 
 
-read_in_dist_to_coast_data = function(filepath) {
-    # https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/
-    read.delim(filepath, header = FALSE, col.names = c("long", "lat", "dist_km"))
-}
 
-get_dist_from_coast = function(dist_to_coast_df, target_lat, target_long, match_threshold = 0.05) {
+get_dist_from_coast = function(target_lat, target_long, match_threshold = 0.05) {
     # match_threshold in km
     close_enough_lat_filter = (abs(dist_to_coast_df["lat"] - target_lat) < match_threshold)
     close_enough_lat = dist_to_coast_df[close_enough_lat_filter,]
@@ -115,12 +123,10 @@ get_dist_from_coast = function(dist_to_coast_df, target_lat, target_long, match_
     mean(loc_matches[["dist_km"]])
 }
 
-add_dist_to_coast = function(dist_to_coast_df, ebd_df) {
-    lat_col = "latitude"
-    lon_col = "longitude"
+add_dist_to_coast = function(ebd_df, lat_col, lon_col) {
     ebd_df["dist_to_coast_mi"] = rep(0.0, nrow(ebd_df))
     for (x in 1:nrow(ebd_df)) {
-        ebd_df[x, "dist_to_coast_mi"] = -round(0.62137 * get_dist_from_coast(dist_to_coast_df, ebd_df[[x, lat_col]], ebd_df[[x, lon_col]]), 3)
+        ebd_df[x, "dist_to_coast_mi"] = -round(0.62137 * get_dist_from_coast(ebd_df[[x, lat_col]], ebd_df[[x, lon_col]]), 3)
     }
     ebd_df
 }
