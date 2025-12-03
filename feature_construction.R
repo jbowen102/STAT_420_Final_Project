@@ -17,8 +17,8 @@ projection <- raster::projection
 
 
 get_auk_extract = function(ebd_sed_suffix) {
-    f_out_ebd_only <- file.path(PROJECT_DIR, "output", paste("ebd_", ebd_sed_suffix, sep = ""))
-    f_out_sed_only <- file.path(PROJECT_DIR, "output", paste("sed_", ebd_sed_suffix, sep = ""))
+    f_out_ebd_only <- file.path(PROJECT_DIR, "output", "auk", paste("ebd_", ebd_sed_suffix, sep = ""))
+    f_out_sed_only <- file.path(PROJECT_DIR, "output", "auk", paste("sed_", ebd_sed_suffix, sep = ""))
 
     ebd_only_df = read_ebd(f_out_ebd_only, unique=TRUE, rollup=TRUE) # do not need to use auk_unique() when unique=TRUE passed here. Same for auk_rollup()
     sed_only_df = read_sampling(f_out_sed_only, unique=TRUE)
@@ -92,14 +92,14 @@ aggregate_in_cells = function(ebd_df, spacing = 10) {
 }
 
 
-construct_feature_df = function(ebd_sed_suffix) {
+construct_feature_df = function(ebd_sed_suffix, hex_spacing = 10) {
     # Read extracted data back in
     auk_dfs <- get_auk_extract(ebd_sed_suffix)
     ebd_only_df <- auk_dfs$ebd_only_df
     sed_only_df <- auk_dfs$sed_only_df
     ebird_zf_df_filtered <- zerofill_and_clean(ebd_only_df, sed_only_df)
     # AGGREGATION using hex grid
-    output <- aggregate_in_cells(ebird_zf_df_filtered, spacing = 10)
+    output <- aggregate_in_cells(ebird_zf_df_filtered, spacing = hex_spacing)
     ebird_filtered_agg <- output$ebird_df_agg
     hex_spatvector <- output$hex_spatvector
 
@@ -133,13 +133,13 @@ construct_feature_df = function(ebd_sed_suffix) {
 }
 
 save_feature_df = function(df, filename) {
-    df_out_path = file.path(PROJECT_DIR, "output", filename)
+    df_out_path = file.path(PROJECT_DIR, "output", "feature_df", filename)
     write_csv(df, df_out_path, na = "")
 }
 
 read_feature_df = function(filename) {
     # Read saved file
-    df_out_path = file.path(PROJECT_DIR, "output", filename)
+    df_out_path = file.path(PROJECT_DIR, "output", "feature_df", filename)
     read_csv(df_out_path) %>%
         mutate_if(is.character, factor) %>%
         mutate(dominant_nlcd_code = as.factor(dominant_nlcd_code)) %>%
