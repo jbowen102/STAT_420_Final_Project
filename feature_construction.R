@@ -92,7 +92,7 @@ aggregate_in_cells = function(ebd_df, spacing = 10) {
 }
 
 
-construct_feature_df = function(ebd_sed_suffix, hex_spacing = 10) {
+construct_feature_df = function(ebd_sed_suffix, hex_spacing = 10, save_elev_data = FALSE) {
     # Read extracted data back in
     auk_dfs <- get_auk_extract(paste(ebd_sed_suffix, "txt", sep = "."))
     ebd_only_df <- auk_dfs$ebd_only_df
@@ -107,9 +107,13 @@ construct_feature_df = function(ebd_sed_suffix, hex_spacing = 10) {
     print("Adding distance-to-coast data")
     ebird_filtered_agg2 <- add_dist_to_coast(ebird_filtered_agg, "cell_ctr_lat", "cell_ctr_lon") %>%
         add_elev_data()
+    if (save_elev_data) {
+        write_elev_local_file(ebird_filtered_agg2)
+    }
+
     # For some reason, had to manually add this one. API not responding.
     # https://glandnav.com/tools/gps-elevation-finder
-    ebird_filtered_agg2[ebird_filtered_agg2$cell == 512468, "elevation_ft"] <- 59
+    # ebird_filtered_agg2[ebird_filtered_agg2$cell == 512468, "elevation_ft"] <- 59
 
     # MRLC land-cover covariates
     ebird_filtered_agg3 = add_all_land_cover_covariates(ebird_filtered_agg2, hex_spatvector)
