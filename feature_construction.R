@@ -94,7 +94,7 @@ aggregate_in_cells = function(ebd_df, spacing = 10) {
 
 construct_feature_df = function(ebd_sed_suffix, hex_spacing = 10) {
     # Read extracted data back in
-    auk_dfs <- get_auk_extract(ebd_sed_suffix)
+    auk_dfs <- get_auk_extract(paste(ebd_sed_suffix, "txt", sep = "."))
     ebd_only_df <- auk_dfs$ebd_only_df
     sed_only_df <- auk_dfs$sed_only_df
     ebird_zf_df_filtered <- zerofill_and_clean(ebd_only_df, sed_only_df)
