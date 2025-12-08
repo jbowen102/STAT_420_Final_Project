@@ -1,0 +1,117 @@
+---
+title: "STAT 420 - Final Project"
+author: "Jonathan Bowen"
+date: "2025-12-07"
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    theme: readable
+    toc: true
+    highlight: zenburn
+editor_options:
+  chunk_output_type: console
+---
+
+### Intro
+The goal of my analysis is to explore how various environmental and weather factors can help predict observations of the Common Raven.  
+I plan to use a composite dataset for my project. The primary source of my data is the Cornell Lab of Ornithology's [eBird Basic Dataset](https://ebird.org/data/download/ebd), sometimes called "EBD". As described on their website, "[eBird](https://ebird.org/home) is among the world’s largest biodiversity-related science projects" and "eBird data document bird distribution, abundance, habitat use, and trends through checklist data collected within a simple, scientific framework." eBird makes available the full dataset of observations upon request. It is a ~220 GB archive that expands to a ~785 GB text file when extracted.  
+<br>  
+
+Each entry/row of the eBird dataset includes fields/columns for species of bird observed, number of individuals observed, date, time, location, and many more.  
+I am then using the [`elevatr` R package from the US EPA](https://github.com/USEPA/elevatr) to translate the eBird-observation latitude and longitude values into elevation above sea level, to serve as a more interesting numerical predictor.  
+<br>
+I am also using the [Visual Crossing API](https://www.visualcrossing.com/resources/documentation/weather-api/timeline-weather-api/) to gather weather data for each bird-observation location (lat/long) and date. Specifically, I will use the day's average temperature, total precipitation, average wind speed, and overall "conditions" (serving as a categorical predictor) in the regression. Visual Crossing allows access to the API for registered users, and a free account allows 1000 queries per day.  
+Finally, I use the [NASA Ocean Biology Processing Group's "Distance to the Nearest Coast" dataset](https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/) to associate each bird-observation location (lat/long) with distance from the nearest coast. This dataset is a text file NASA makes available for download.  
+
+<br>
+
+<br><br>
+In summary, these will be the predictors:  
+- hour of day (extracted from observation timestamp) (numeric)
+- elevation (numeric)
+- distance from coast (numeric)
+- day's avg temp (numeric)
+- day's precipitation amount (numeric)
+- day's avg wind speed (numeric)
+- day's general weather "conditions" (categorical)
+<br>
+And the response variable will be number of Common Ravens observed.
+
+The current version of the eBird Basic Dataset contains 5,656,350 observations (any bird, all time, anywhere). My choice of scope will narrow that down. For my proposal, I've chosen to predict sightings of the Common Raven in the year 2024, in my state of South Carolina (in the US), and between the hours of 06:00 and 19:00. This filtered dataset contains 293 observations.  
+
+<br>
+
+### Citation for eBird data use
+*eBird Basic Dataset. Version: EBD_relSep-2025. Cornell Lab of Ornithology, Ithaca, New York. Sep 2025.*
+(https://science.ebird.org/en/use-ebird-data/citation)  
+
+<br>
+
+### Setup/packages
+
+I am using the [auk](https://github.com/CornellLabofOrnithology/auk) R package to interface with the EBD dataset.  
+
+```{r, echo = FALSE}
+options(scipen = 1, digits = 2)
+```
+
+```{r, results = "hide", message = FALSE}
+library(auk)
+
+```
+
+```{r, echo = FALSE}
+PROJECT_DIR = getwd()
+ebd_full_dir = file.path(PROJECT_DIR, "source_data", "ebd_relSep-2025")
+ebd_full_filename = "ebd_relSep-2025.txt"
+```
+
+<br><br>
+
+
+<br><br>
+
+<br>
+
+### Add elevation (<span style="color:springgreen;">elevatr</span>)
+
+
+```{r, add_elevatr_data, message = FALSE, warning = FALSE}
+
+```
+
+<br><br>
+
+
+### Add weather (<span style="color:blueviolet;">Visual Crossing</span>)
+
+```{r}
+```
+
+<br><br>
+
+
+### Add dist-to-coast (<span style="color:deepskyblue;">NASA</span>)
+
+```{r, name_of_this_chunk}
+dist_to_coast_filepath = file.path(PROJECT_DIR, "source_data", "NASA_dist2coast.txt")
+dist_to_coast_df = read.delim(dist_to_coast_filepath, header = FALSE, col.names = c("long", "lat", "dist_km"))
+```
+
+
+
+<br><br>
+
+
+
+
+
+![source: https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/](https://oceancolor.gsfc.nasa.gov/images/resources/distfromcoast/dist2coast.jpg)
+
+
+
+
+
+
+
