@@ -42,7 +42,7 @@ zerofill_and_clean = function(ebd_only_df, sed_only_df) {
                                            NA_character_, observation_count),
                observation_count = as.integer(observation_count),
                effort_distance_km = if_else(protocol_name == "Stationary", 
-                                               0, effort_distance_km),
+                                            0, effort_distance_km),
                # convert duration to hours
                effort_hours = duration_minutes / 60,
                effort_speed_kmph = effort_distance_km / effort_hours,
@@ -50,6 +50,7 @@ zerofill_and_clean = function(ebd_only_df, sed_only_df) {
                hours_of_day = time_to_decimal(time_observations_started),
                # split date into year and day of year
                year = year(observation_date),
+               month = month(observation_date),
                day_of_year = yday(observation_date)) %>%
         filter(effort_hours >= 15/60,
                effort_hours <= 5,
@@ -69,15 +70,15 @@ aggregate_in_cells = function(ebd_df, spacing = 10) {
         mutate(cell = dgGEO_to_SEQNUM(dggs, longitude, latitude)$seqnum) %>%
         group_by(cell) %>% 
         summarize(n_checklists = n(),
-                    n_detected = sum(species_observed),
-                    det_freq = mean(species_observed),
-                    mean_num_observers = mean(number_observers),
-                    mean_start_time_hr = mean(hours_of_day),
-                    med_duration = median(effort_hours),
-                    mean_dist_km = mean(effort_distance_km)) %>% 
+                  n_detected = sum(species_observed),
+                  det_freq = mean(species_observed),
+                  mean_num_observers = mean(number_observers),
+                  mean_start_time_hr = mean(hours_of_day),
+                  med_duration = median(effort_hours),
+                  mean_dist_km = mean(effort_distance_km)) %>%
         ungroup() %>%
         mutate(cell_ctr_lat = dgSEQNUM_to_GEO(dggs, cell)$lat_deg,
-                cell_ctr_lon = dgSEQNUM_to_GEO(dggs, cell)$lon_deg)
+               cell_ctr_lon = dgSEQNUM_to_GEO(dggs, cell)$lon_deg)
     # https://strimas.com/ebp-workshop/subsampling.html
     # https://www.rdocumentation.org/packages/dggridR/versions/3.1.0/topics/dgSEQNUM_to_GEO
 
@@ -86,8 +87,8 @@ aggregate_in_cells = function(ebd_df, spacing = 10) {
     hex_polygons_list$cell <- hex_polygons_list$seqnum # Need to match ebd df col name
     # Convert to terra SpatVector
     hex_spatvector <- terra::vect(hex_polygons_list)
-    # plot(hex_spatvector)
     # ChatGPT helped with this part.
+    # plot(hex_spatvector)
     list("ebird_df_agg" = ebird_agg, "hex_spatvector" = hex_spatvector)
 }
 
@@ -95,13 +96,15 @@ aggregate_in_cells = function(ebd_df, spacing = 10) {
 construct_feature_df = function(ebd_sed_suffix, hex_spacing = 10, save_elev_data = FALSE) {
     # Read extracted data back in
     auk_dfs <- get_auk_extract(paste(ebd_sed_suffix, "txt", sep = "."))
-    ebd_only_df <- auk_dfs$ebd_only_df
-    sed_only_df <- auk_dfs$sed_only_df
-    ebird_zf_df_filtered <- zerofill_and_clean(ebd_only_df, sed_only_df)
+    ebird_zf_df_filtered <- zerofill_and_clean(auk_dfs$ebd_only_df, auk_dfs$sed_only_df)
+    print("Filtered, zero-filled, and cleaned df:")
+    print(str(ebird_zf_df_filtered))
     # AGGREGATION using hex grid
     output <- aggregate_in_cells(ebird_zf_df_filtered, spacing = hex_spacing)
     ebird_filtered_agg <- output$ebird_df_agg
     hex_spatvector <- output$hex_spatvector
+    print("Hex-aggregated df:")
+    print(str(ebird_filtered_agg))
 
     # Add distance to coast and elevation
     print("Adding distance-to-coast data")
@@ -133,7 +136,7 @@ construct_feature_df = function(ebd_sed_suffix, hex_spacing = 10, save_elev_data
     ebird_filtered_agg4$type <- if_else(runif(nrow(ebird_filtered_agg4)) <= 0.8, "train", "test") %>%
         as.factor()
     
-    ebird_filtered_agg4
+    list("ebird_features_df" = ebird_filtered_agg4, "hex_spatvector" = hex_spatvector)
 }
 
 save_feature_df = function(df, filename) {
