@@ -3,50 +3,245 @@ title: "STAT 420 - Final Project"
 author: "Jonathan Bowen"
 date: "2025-12-07"
 output:
-  pdf_document:
-    toc: true
   html_document:
     theme: readable
     toc: true
     highlight: zenburn
+  pdf_document:
+    toc: true
 editor_options:
   chunk_output_type: console
 ---
 
-### Intro
-The goal of my analysis is to explore how various environmental and weather factors can help predict observations of the Common Raven.  
-I plan to use a composite dataset for my project. The primary source of my data is the Cornell Lab of Ornithology's [eBird Basic Dataset](https://ebird.org/data/download/ebd), sometimes called "EBD". As described on their website, "[eBird](https://ebird.org/home) is among the world’s largest biodiversity-related science projects" and "eBird data document bird distribution, abundance, habitat use, and trends through checklist data collected within a simple, scientific framework." eBird makes available the full dataset of observations upon request. It is a ~220 GB archive that expands to a ~785 GB text file when extracted.  
+<br>
+
+### Introduction
+My goal is to gain insight into how environmental/habitat factors impact detection rates of a specific bird species. The bird species I chose to predict is the pileated woodpecker.
+
+The below map shows the Pileated Woodpecker's range in North America (source: https://www.allaboutbirds.org/guide/Pileated_Woodpecker/maps-range):  
+![](reference/pileated_woodpecker_range_32323421.jpg)  
 <br>  
 
+I used a composite dataset for my project. The primary source of my data is the Cornell Lab of Ornithology's [eBird Basic Dataset](https://ebird.org/data/download/ebd), sometimes called "EBD". As described on their website, "[eBird](https://ebird.org/home) is among the world’s largest biodiversity-related science projects" and "eBird data document bird distribution, abundance, habitat use, and trends through checklist data collected within a simple, scientific framework." eBird makes available the full dataset of observations upon request.  
+
 Each entry/row of the eBird dataset includes fields/columns for species of bird observed, number of individuals observed, date, time, location, and many more.  
-I am then using the [`elevatr` R package from the US EPA](https://github.com/USEPA/elevatr) to translate the eBird-observation latitude and longitude values into elevation above sea level, to serve as a more interesting numerical predictor.  
+I then compiled habitat-related data from several other data sources:  
+- Elevation data using the [`elevatr` R package from the US EPA](https://github.com/USEPA/elevatr)  
+- Distance to the nearest coast from the [NASA Ocean Biology Processing Group](https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/)  
+- Land-cover classifications from the National Land Cover Database  
+- Annual mean temperature and cumulative precipitation using the [`prism`](https://cran.r-project.org/web/packages/prism/index.html) package  
 <br>
-I am also using the [Visual Crossing API](https://www.visualcrossing.com/resources/documentation/weather-api/timeline-weather-api/) to gather weather data for each bird-observation location (lat/long) and date. Specifically, I will use the day's average temperature, total precipitation, average wind speed, and overall "conditions" (serving as a categorical predictor) in the regression. Visual Crossing allows access to the API for registered users, and a free account allows 1000 queries per day.  
-Finally, I use the [NASA Ocean Biology Processing Group's "Distance to the Nearest Coast" dataset](https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/) to associate each bird-observation location (lat/long) with distance from the nearest coast. This dataset is a text file NASA makes available for download.  
 
-<br>
-
-<br><br>
-In summary, these will be the predictors:  
-- hour of day (extracted from observation timestamp) (numeric)
-- elevation (numeric)
-- distance from coast (numeric)
-- day's avg temp (numeric)
-- day's precipitation amount (numeric)
-- day's avg wind speed (numeric)
-- day's general weather "conditions" (categorical)
-<br>
-And the response variable will be number of Common Ravens observed.
-
-The current version of the eBird Basic Dataset contains 5,656,350 observations (any bird, all time, anywhere). My choice of scope will narrow that down. For my proposal, I've chosen to predict sightings of the Common Raven in the year 2024, in my state of South Carolina (in the US), and between the hours of 06:00 and 19:00. This filtered dataset contains 293 observations.  
 
 <br>
 
-### Citation for eBird data use
+### Data Curation
+
+I adapted my approach from the [eBird Best Practices Workshop](https://strimas.com/ebp-workshop/) notes and the [Best Practices for Using eBird Data](https://ebird.github.io/ebird-best-practices/) eBook, both written or contributed to by Matthew Strimas-Mackey, a lead contributor to the [auk](https://github.com/CornellLabofOrnithology/auk) package I used to filter and pre-process eBird data.
+I followed the preprocessing guidance and read through the inference and modeling sections, gleaning what I could apply to a linear regression model.
+	A unique property of eBird checklist data is the ability to infer null samples by allowing user to assert non-detections, discussed more below.  
+
+
+<br>
+
+#### Citation for eBird data use
 *eBird Basic Dataset. Version: EBD_relSep-2025. Cornell Lab of Ornithology, Ithaca, New York. Sep 2025.*
 (https://science.ebird.org/en/use-ebird-data/citation)  
 
+
 <br>
+
+#### Filtering eBird Data
+
+The current version of the eBird Basic Dataset contains 5,656,350 observations (any bird, all time, anywhere).
+I chose to limit the analysis to my home state of South Carolina and the year 2024 to reduce the dataset to a manageable size while hopefully including enough variation in habitat, weather, and topology.
+Filtered eBird checklist count (detections and non-detections): 56,168
+
+I imposed some restrictions to checklists included in the analysis to those that were collected over a period of more than 15 minutes and less than 5 hours. I also limited checklists to those with 5 or fewer observers, 10 or fewer km traveled, and speed < 100 kph (I guess people in cars?). These types of filters were recommended in the eBird guide to reduce variability and remove outliers.
+
+
+<br>
+
+#### Aggregation
+
+Again, I can't use individual checklists as the observations because they don't have a useful (numerical) response variable. I could build a logistic-regression classifier using success as >0 individuals observed, but I need a numeric response variable. Number of individuals detected on a checklist is "drawing the lines in the wrong place" - one person observing 10 birds will send a different signal to the model than 10 people each observing one bird. I want my model to predict something like species occupancy/abundance rather than checklist score. And predicting checklist score would not control for location popularity, making correlation with climate and habitat variables less useful. More popular locations would tend to have better checklist scores than less popular places.
+To get the dataset into a form conducive to a regression analysis, I aggregated over space and time.
+I segmented the state into 10km hex cells using the dggridR package. Looking at the grid overlaid on the state, this seems like a good compromise to provide sufficient data reduction without completely smoothing out local variation.
+Hex cell count:
+    732 hex cells
+
+![](output/pileated_hex_grid.png)
+
+Then all the checklists from 2024 that fall into a given cell are collected together, and summary statistics are generated to use as that cell's contribution to the dataset.
+The hex cells become the "rows" in the dataset I'll perform regression on.
+Then the response becomes the "detection frequency" - how many complete checklists in 2024 in this area (hex cell) included an observation (any number) of the species of interest.
+
+<br>
+
+#### Effort variables from eBird checklists
+
+At the recommendation of the eBird Best Practices doc, I included so-called "effort" variables to account for observers' variation in probability of seeing a species that is present.
+- Number of observers  
+    "The total number of observers participating the sampling event."  
+    Used the mean number of observers as the summary statistic for each hex cell.  
+- Checklist start time (hours after midnight)  
+    "The time observations were initiated."  
+    Used the mean start time as the summary statistic for each hex cell.  
+- Duration (hours)  
+    "The duration of the sampling event."  
+    Used the median duration as the summary statistic for each hex cell.  
+- Distance traveled (km)  
+    "The distance traveled during the sampling event."  
+    [provide graph in appendix supporting this variation]  
+    Used the mean distance traveled as the summary statistic for each hex cell.  
+
+These effort variables allow my model to account for areas where birders tend to "put in more effort". I'd expect a hex cell in a state park to have higher number of observers, a lower start time, longer duration, and longer distance traveled that a hex cell in suburbia.
+
+Show some of the plots like distance-traveled effect and time of day effect; talk about how that also is expected to correspond to more serious and experienced birders, which will increase detection sensitivity. Having more observers also tends to help, and again, I expect this to be a proxy for a higher (at least average) experience level, and I expect it to be correlated with distance traveled, and group trips tend to start early in the morning for peak detection probability (higher level of bird activity and vocalization). Also commitment level is higher, since observers gathering and creating group checklists takes coordination.
+    Make sure none of these contradicts my correlation findings.
+
+
+<br>
+
+#### Habitat Covariates
+
+Instead of using raw GPS lat and long as predictors, I wanted to use more direct and specific locational differences as predictors.
+
+I looked for data sources that could inform what makes one hex cell on the map different from others, with indicators that I expect bird occupancy to be sensitive to - geography, topology, weather, etc.
+
+- Elevation  
+    I used the elevatr R package from the US EPA (https://github.com/USEPA/elevatr) to translate the each hex cell's center latitude and longitude coordinates into elevation above sea level, to serve as a more interesting numerical predictor.
+    I expect this to be constant throughout 2024.
+- Distance from the coast (obviously important for shorebirds, but maybe it matters for other species too?)   
+    I used the NASA Ocean Biology Processing Group's "Distance to the Nearest Coast" dataset (https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/) to associate each hex cell's location (lat/long) with distance from the nearest coast. This dataset is a text file NASA makes available for download.
+    I expect this to be constant throughout 2024.
+- "Land cover" classification  
+    This is something I wasn't familiar with when I started this project.
+    It is basically the type of landscape (forest, wetland, developed, grassland, etc.)
+    I downloaded the 2024 Land Cover (CONUS) data product from [this page](https://www.mrlc.gov/data?f%5B0%5D=project_tax_term_term_parents_tax_term_name%3AAnnual%20NLCD) on the [Multi-Resolution Land Characteristics (MRLC) Consortium site](https://www.mrlc.gov/data/type/land-cover). These data are often called the National Land Cover Database (NLCD) and the USGS contributes to them as well.
+    Land-cover data are captured by both by field survey and analysis of remotely sensed imagery. [Wikipedia](https://en.wikipedia.org/wiki/Land_cover)
+    I am making the assumption that this is constant throughout 2024, although for some hex cells, that wont' be true (land gets developed, ecology changes).
+    I used the downloaded land-cover raster to determine for each hex cell, what are the proportions of each land-cover type (so it became several variables). I did some further processing on these data, explained in the Feature Engineering section below.
+- Annual mean temperature  
+    I used the [prism](https://cran.r-project.org/web/packages/prism/index.html) package to download and employ rasters from the Northwest Alliance for Computational Science and Engineering ([NACSE](https://www.nacse.org)), which is part of [Oregon State University](https://www.oregonstate.edu). According to [their website](https://prism.oregonstate.edu/overview/), "To create a continuous weather map across the country, our automated systems collect weather station observations from tens of thousands of reporting stations per day. These observations are fed into a sophisticated computer model called PRISM (Parameter-elevation Regressions on Independent Slopes Model)."
+    For each hex cell, I collected all associated pixels from the annual-mean-temp raster and averaged to create the average temp for that cell in 2024.
+    This variable is pretty coarse since it's averaging over the whole year (through seasons), but I still saw lots of variability (See Exploratory Data Analysis section below).
+- Annual cumulative precipitation  
+    How much rain a hex cell gets (and snow, but mostly rain here in SC)
+    This is also acquired from the [PRISM](https://prism.nacse.org/) data.
+    For each hex cell, I collected all associated pixels from the annual-precipitation raster and averaged to create the total precipitation for that cell in 2024.
+
+
+<br>
+
+#### Feature Engineering
+
+
+The dataset I used includes 15 different land-cover classes:
+    11 - "Open Water",  
+    21 - "Developed, Open Space",  
+    22 - "Developed, Low Intensity",  
+    23 - "Developed, Medium Intensity",  
+    24 - "Developed, High Intensity",  
+    31 - "Barren Land",  
+    41 - "Deciduous Forest",  
+    42 - "Evergreen Forest",  
+    43 - "Mixed Forest",  
+    52 - "Shrub/Scrub",  
+    71 - "Herbaceous",  
+    81 - "Pasture/Hay",  
+    82 - "Cultivated Crops",  
+    90 - "Woody Wetlands",  
+    95 - "Emergent Herbaceous Wetlands"  
+
+I aggregated these to simplify a bit, for example mapping all developed subcategories into one. Here are all the mappings:  
+
+|     NLCD categories                                       |     Simplified "ecological group" predictor    |
+|-----------------------------------------------------------|------------------------------------------------|
+|     Deciduous Forest,   Mixed Forest, Evergreen Forest    |     Forest                                     |
+|     Pasture/Hay,   Cultivated Crops                       |     Agriculture/Open                           |
+|     Grassland/Herbaceous                                  |     Grassland                                  |
+|     Woody Wetlands,   Emergent Herbaceous Wetlands        |     Wetland                                    |
+|     Open Water                                            |     Water                                      |
+|     Developed, all   intensities                          |     Developed                                  |
+|     Shrub/Scrub                                           |     Shrubland                                  |
+
+
+This yields seven simplified land-cover categories I'm calling "ecological groups". I summed the land-cover proportions to get a proportion o
+
+I could have used the ecological-group proportions present in each cell as numerical predictors, but I wanted to aggregate them into a categorical variable for lower model complexity, and possibly a more interesting result. For example, including the proportion of "Forest" ecology in a regression model predicting woodpecker detections yielded a significant (low p-value) beta parameter, but that's an obvious result. I thought it would be more interesting to see if a hex cell's "dominant" ecology classification (based on the largest proportion among its constituent ecological groups) contributes predictive or explanatory value.
+
+Each hex cell's "dominant ecological group" (categorical variable) then got translated into a dummy/one-hot encoding in the model.
+
+This is the final list of predictors to be used:
+    - Checklist average number of observers  
+    - Checklist average start time of day (hours past midnight)  
+    - Checklist median duration  
+    - Checklist average distance traveled  
+    - Distance from coast  
+    - Elevation  
+    - Dominant ecological-group classification ('Forest', 'Agriculture', 'Grassland', 'Wetland', 'Water', 'Developed', 'Shrubland')  
+    - Annual mean temperature  
+    - Annual precipitation  
+
+All are continuous/numerical except for the ecology classification, which is categorical. Each row represents a cell in the hex grid across the state with its values aggregated over all of 2024 (e.g., precipitation summed for the year, checklist distance traveled averaged over the year).
+The response variable is detection frequency (number of checklists with species observed vs. total number of complete checklists in the hex cell)
+
+
+<br>
+
+#### Data Cleaning
+
+Converted char columns to factor
+    Dominant ecological group
+    
+Removing N/As from covariates
+    15 out of 732, yielding n=717 as final cell/row count.
+    Don't have temp or precip data for these 15 cells for some reason.
+
+
+<br>
+
+#### Response transformation
+    Detection frequency is my basic response variable - what proportion of checklists in a hex cell in 2024 included a positive detection of the species. This is a numerical prediction, but its [0-1] range (and "counting" basis) is unconventional for a standard regression model, so it took some experimenting to find an appropriate transformation. I tried a log transformation (consistent w/ the recommendation from a Box-Cox analysis), which improved things somewhat, but ultimately I settled on the logit transformation, using the glm() binomial modeling framework to model my detection rate (not binary). All subsequent discussion relates to models this logit-transformed response, unless otherwise specified.
+
+
+<br>
+
+### Methods
+
+<br>
+
+#### Exploratory data analysis
+
+
+<br>
+
+#### Full/base model interpretation (no poly or interaction terms)
+
+
+<br>
+
+#### Diagnostics
+
+
+<br>
+
+#### Improvements
+
+
+<br>
+
+### Conclusion
+
+
+<br>
+
+### Appendix
+
+
+
+<br><br>
 
 ### Setup/packages
 
@@ -56,50 +251,32 @@ I am using the [auk](https://github.com/CornellLabofOrnithology/auk) R package t
 options(scipen = 1, digits = 2)
 ```
 
-```{r, results = "hide", message = FALSE}
-library(auk)
-
-```
-
-```{r, echo = FALSE}
-PROJECT_DIR = getwd()
-ebd_full_dir = file.path(PROJECT_DIR, "source_data", "ebd_relSep-2025")
-ebd_full_filename = "ebd_relSep-2025.txt"
-```
-
-<br><br>
 
 
 <br><br>
+
+
+
+Here are detections (red) and non-detections (grey) locations plotted on a map of the state:  
+
+![](./output/pileated_2024_spatial_plot_20251127_crop.png)
 
 <br>
 
 ### Add elevation (<span style="color:springgreen;">elevatr</span>)
 
+```{r, eval = FALSE}
+add_elev_data = function(ebd_df) {
+    ebd_df$elevation = get_elev_point(locations = data.frame(x = ebd_df$longitude, y = ebd_df$latitude), units="feet",  prj = "EPSG:4326", src = "epqs")$elevation
+    ebd_df
+}
+```
 
-```{r, add_elevatr_data, message = FALSE, warning = FALSE}
-
+```{r, add_elevatr_data, message = FALSE, warning = FALSE, eval = FALSE}
+ebd_df_with_elev = add_elev_data(ebd_df)
 ```
 
 <br><br>
-
-
-### Add weather (<span style="color:blueviolet;">Visual Crossing</span>)
-
-```{r}
-```
-
-<br><br>
-
-
-### Add dist-to-coast (<span style="color:deepskyblue;">NASA</span>)
-
-```{r, name_of_this_chunk}
-dist_to_coast_filepath = file.path(PROJECT_DIR, "source_data", "NASA_dist2coast.txt")
-dist_to_coast_df = read.delim(dist_to_coast_filepath, header = FALSE, col.names = c("long", "lat", "dist_km"))
-```
-
-
 
 <br><br>
 
@@ -107,7 +284,6 @@ dist_to_coast_df = read.delim(dist_to_coast_filepath, header = FALSE, col.names 
 
 
 
-![source: https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/](https://oceancolor.gsfc.nasa.gov/images/resources/distfromcoast/dist2coast.jpg)
 
 
 
