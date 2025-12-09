@@ -16,6 +16,28 @@ select <- dplyr::select
 projection <- raster::projection
 
 
+logit_with_NAs <- function(p) {
+  # out = log(p / (1 - p))
+  out = qlogis(p)
+  out[is.infinite(out)] <- NA
+  out
+}
+# qlogis(0)
+# plogis(1)
+
+# logit continuity adjustment
+shift_p = function(p, n) {
+    (p * (n-1) + 0.5) / n
+}
+unshift_p = function(p_shifted, n) {
+    (p_shifted * n - 0.5) / (n - 1)
+}
+logit_shift = function(p, n) {
+    p_shifted <- shift_p(p, n)
+    logit(p_shifted)
+}
+
+
 get_auk_extract = function(ebd_sed_suffix) {
     f_out_ebd_only <- file.path(PROJECT_DIR, "output", "auk", paste("ebd_", ebd_sed_suffix, sep = ""))
     f_out_sed_only <- file.path(PROJECT_DIR, "output", "auk", paste("sed_", ebd_sed_suffix, sep = ""))
@@ -153,3 +175,4 @@ read_feature_df = function(filename) {
         mutate(n_checklists = as.integer(n_checklists)) %>%
         mutate(n_detected = as.integer(n_detected))
 }
+
