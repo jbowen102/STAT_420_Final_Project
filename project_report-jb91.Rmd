@@ -17,7 +17,7 @@ editor_options:
 
 
 ```{r, echo = FALSE}
-options(scipen = 1, digits = 2)
+options(scipen = 1, digits = 4)
 ```
 
 ```{r, setup, message = FALSE, warning = FALSE, echo = FALSE, results='hide'}
@@ -136,7 +136,7 @@ Instead of using raw GPS coordinates as predictors, I wanted to use more direct 
     I used the [`prism`](https://cran.r-project.org/web/packages/prism/index.html) package to download and employ rasters from the Northwest Alliance for Computational Science and Engineering ([NACSE](https://www.nacse.org)), which is part of [Oregon State University](https://www.oregonstate.edu).  
     According to [their website](https://prism.oregonstate.edu/overview/), "To create a continuous weather map across the country, our automated systems collect weather station observations from tens of thousands of reporting stations per day. These observations are fed into a sophisticated computer model called PRISM (Parameter-elevation Regressions on Independent Slopes Model)."  
     For each hex cell, I collected all associated pixels from the annual-mean-temp raster and calculated the average temp for that cell over 2024.  
-    This variable is pretty coarse since it's averaging over the whole year (through seasons), but I still saw lots of variability (See Exploratory Data Analysis section below).
+    This variable is pretty coarse since it's averaging over the whole year (through seasons), but I still saw plenty of variability (See Exploratory Data Analysis section below).
 
 - **Annual cumulative precipitation**  
     This is also acquired from the [PRISM](https://prism.nacse.org/) data.  
@@ -213,14 +213,16 @@ The response variable is detection frequency (number of checklists with species 
 
 I converted the dominant ecological-group character variable to a factor variable. I also removed 15 (out of 732) hex cells where, for whatever reason, temp and precip data was unavailable. This left a final observation/row count of n=717 for the model to fit.  
 
+Resulting data structure (with a few extra non-predictor variables shown for context):
+
+```{r}
+cols <- c("cell", "cell_ctr_lat", "cell_ctr_lon", "n_checklists", "n_detected", "det_freq", "mean_num_observers", "mean_start_time_hr", "med_duration", "mean_dist_km", "dist_to_coast_mi", "elevation_ft", "dominant_eco_group", "tmean_2024_C", "ppt_2024_mm")
+str(ebird_features_df_pwo[cols])
+```
+
+
 
 <br>
-
-## Response transformation
-Detection frequency is my basic response variable - what proportion of checklists in a hex cell in 2024 included a positive detection of the species. This is a numerical prediction, but its [0-1] range (and "counting" basis) is unconventional for a standard regression model, so it took some experimenting to find an appropriate transformation.  
-I tried a log transformation (consistent w/ the recommendation from a Box-Cox analysis), which improved things somewhat, but ultimately I settled on the logit transformation, ultimately adopting the glm() binomial framework to model my detection rate (but still as a proportion, not binary prediction). All subsequent discussion relates to models this logit-transformed response, unless otherwise specified.
-
-
 
 
 
@@ -234,10 +236,45 @@ I tried a log transformation (consistent w/ the recommendation from a Box-Cox an
 ## Exploratory data analysis
 
 
+### Response transformation
+Detection frequency is my basic response variable - what proportion of checklists in a hex cell in 2024 included a positive detection of the species.
+This is a numerical prediction, but its [0-1] range (and "counting" basis) is unconventional for a standard regression model.  In particular, the diagnostics indicated very poor adherence to linearity, normality or errors, and equivariance (see graphs in Appendix).  
+Here is the first model I started with that has no response transformation:
+
+```{r, message = FALSE, warning = FALSE, results='hide'}
+mod_add_pwo = lm(det_freq ~ mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
+                            dist_to_coast_mi + elevation_ft + dominant_eco_group +
+                            tmean_2024_C + ppt_2024_mm,
+                 data = ebird_features_df_pwo, weight = n_checklists)
+```
+
+
+It took some experimenting to find an appropriate transformation. I tried a log transformation (consistent w/ the recommendation from a Box-Cox analysis), which improved things somewhat, but ultimately I settled on the logit transformation, ultimately adopting the `glm()` binomial framework to model my detection rate (but still as a proportion, not binary prediction).  
+
+```{r, message = FALSE, warning = FALSE, results='hide'}
+form_pwo_glm_base = det_freq ~ 
+                    (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
+                     dist_to_coast_mi + elevation_ft + dominant_eco_group +
+                     tmean_2024_C + ppt_2024_mm)
+mod_pwo_glm_base = glm(form_pwo_glm_base,
+                       weights = n_checklists,
+                       data = ebird_features_df_pwo,
+                       family = binomial)
+```
+
+All subsequent discussion relates to models this logit-transformed response, unless otherwise specified.  See Appendix for more output and graphs supporting this direction.
 
 <br>
 
 ### Summary statistics
+
+
+10-fold cross-validation error on base model:
+
+```{r, message = FALSE, warning = FALSE}
+set.seed(42)
+get_k10_cv_rmse_glm(form_pwo_glm_base, ebird_features_df_pwo)
+```
 
 
 
@@ -254,9 +291,15 @@ I then used `cor()` to get an idea of individual predictors' correlation magnitu
 Distance to coast and elevation have a correlation coefficient of 84%. Elevation and mean temp have a -85% correlation, meaning that the yearly average temp tends to decrease with distance from the coast, as one would expect.  
 Elevation and precipitation have a correlation coefficient of 57%, indicating that higher elevations tend to have higher precipitation.  
 
-Next I used the `car` package's `vif()` function to evaluate generalized VIF for the base model, and the highest values were for distance to coast, elevation, and mean temp. This makes sense based on the correlation coefficient among them and the roughly linear trend visible in the pairs plot. None are higher than the conventional "high VIF" cutoff of 5 though, so I don't expect excessive parameter-estimate variance.  
+Next I evaluated the generalized VIF for the base model, and the highest values were for distance to coast, elevation, and mean temp. This makes sense based on the correlation coefficient among them and the roughly linear trend visible in the pairs plot. None are higher than the conventional "high VIF" cutoff of 5 though, so I don't expect excessive parameter-estimate variance.  
+
+```{r}
+car::vif(mod_pwo_glm_base)
+```
 
 I also created variable-added plots for each of my numerical predictors, but most looked like noise. The ones with an appreciable slope to the trend line had high-leverage points that seemed responsible for that.  
+
+![](output/pileated_var_added_plots.png)
 
 Finally, I made new models, omitting individual predictors to see how significance of other predictors changed. I noticed that some predictors actually get less significant when certain other predictors were omitted, e.g., when I removed median checklist duration as a predictor, dominant eco groups became less significant. I haven't been able to make sense of this, but it could be due to invalid model assumptions (linearity or normality of errors, etc.) undermining the hypothesis test's validity.  
 Removing mean_dist_km made mean_num_observers, dist to coast, elevation, precip, and dominant eco group all more significant, so mean_dist_km seems to have collinearity with these other predictors.  
@@ -272,7 +315,8 @@ When I removed two of any three of elevation, temp, and distance to coast, the s
 |     tmean_2024_C        |     0.40732       |     0.119541      |     0.27595       |                   |     0.00044       |                   |                   |
 (These were all done w/ additive model and no response transformation, so the values don't reflect my chose base model, but the effect is still valid.)
 
-![](output/pileated_var_added_plots.png)
+
+Here are the variable-added plots, showing relatively low multicollinearity:  
 
 
 <br>
@@ -288,7 +332,17 @@ I explored high-leverage points and outliers and found that ~13% of the data are
 This high number of high residuals matches the heavy tails I saw in the normal Q-Q plot.  
 Using the rule of thumb of Cook's distance > 4/n, I determined ~21% of the data points are "influential". This tells me the model could use some work before being used for real-world inference.  
 
-I used the `car::crPlots()` to create component + residual plots and evaluate nonlinear trends in the data. This gave me some indicationn of what variables could benefit from a transformation (later).
+I looked at some distributions of differnet predictors to ensure there was enough variation for the model to "fit". Here's an example of the spread of annual average temp and cumulative precipitation:  
+
+```{r}
+par(mfrow = c(1, 2))
+hist(ebird_features_df_pwo$tmean_2024_C, main = "Annual mean temps (C)")
+hist(ebird_features_df_pwo$ppt_2024_mm, main = "Annual precipitation (mm)")
+```
+
+I also analyzed certain individual trends, like the effect of the eBird-checklist "effort" variables on the detection rate. See the appendix for separate plots of these.  
+
+I used the `car::crPlots()` to create component + residual plots and evaluate nonlinear trends in the data. This gave me some indicationn of what variables could benefit from a transformation. See the plots in the Appendix.
 
 <br>
 
@@ -342,12 +396,26 @@ To evaluate linearity and equivariance, I used a fitted-vs-residuals plot. I als
 To evaluate normality of errors, I used both a normal Q-Q plot and the Shapiro-Wilk test.
 
 Initially, all diagnostics indicated the model lacked linearity, equivariance, and normality of errors.
-The model w/ raw detection frequency as response shows a very heavy right tail on the normal Q-Q plot and a diagonal trend on the fitted-vs-residuals plot. The variance/spread of the residuals is not centered at 0 or constant as the fitted value varies.
-I was able to get a good-looking Q-Q plot and "pass" the Shapiro-Wilk test by transforming my response variable to be the log of raw detection frequency. Unfortunately, it still failed to exhibit homoscedasticity or linearity on the fitted-vs-residuals plot (though it is on-average centered at 0 now). I also tried a reciprocal transformation to hopefully stabilize the variance but with no luck.
+The model w/ raw detection frequency as response shows a very heavy right tail on the normal Q-Q plot and a diagonal trend on the fitted-vs-residuals plot. The variance/spread of the residuals is not centered at 0 or constant as the fitted value varies.  
+I was able to get a good-looking Q-Q plot and "pass" the Shapiro-Wilk test by transforming my response variable to be the log of raw detection frequency. Unfortunately, it still failed to exhibit homoscedasticity or linearity on the fitted-vs-residuals plot. I also tried a reciprocal transformation to hopefully stabilize the variance but with no luck.  
+See the graphs of the non-transformed and log-transformed models in the Appendix.  
 
 After the professor's recommendation, I opted to use the logit transformation on my response variable based on its theoretical underpinning matching my proportion/counting-based variable. This transformation provides a broader quantitative range for the response variable instead of the [0, 1] range detection frequency has.
-Despite rejecting the null hypothesis for both Shapiro-Wilk and Breusch-Pagan tests, the fitted-vs-residuals plot is now centered at ~0 for all fitted values; the spread just decreases with fitted value magnitude. This gives me confidence in the linearity assumption at least, although the variance is still not constant. The normal Q-Q plot also looks more symmetrical that the original one, although it still shows the error distribution has heavy tails.
+Despite rejecting the null hypothesis for both Shapiro-Wilk and Breusch-Pagan tests, the fitted-vs-residuals plot is now centered at ~0 for all fitted values; the spread just decreases with fitted value magnitude. This gives me confidence in the linearity assumption at least, although the variance is still not constant. The normal Q-Q plot also looks more symmetrical that the original one, although it still shows the error distribution has heavy tails.  
+These are the resulting diagnostic plots and test results for the `glm()`/logit-transformed/binomial model:  
 
+```{r}
+qqnorm(resid(mod_pwo_glm_base), col = "red")
+qqline(resid(mod_pwo_glm_base))
+shapiro.test(resid(mod_pwo_glm_base))
+```
+
+```{r}
+plot(resid(mod_pwo_glm_base) ~ fitted(mod_pwo_glm_base), col = "blue")
+lmtest::bptest(mod_pwo_glm_base)
+```
+
+<br>
 Since I was unable to transform the model to one with normally-distributed or equal-variance errors, some of my future inferences will be invalid. I'll mostly ignore this from now on for the sake of the assignment and comment on what would be a useful inference, if the LINE assumptions held.
 
 <br>
@@ -365,11 +433,14 @@ I don't want to go higher than third-order because the data is so noisy, the add
 I think in many cases, my interpretation of "significance" is dubious because some LINE assumptions don't hold. So that makes it even more important to let cross-validation guide the component selection.  
 Here is my final model with all chosen polynomial terms included:  
 
-    det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
-                dist_to_coast_mi + elevation_ft + dominant_eco_group + tmean_2024_C + ppt_2024_mm +
-                I(mean_dist_km^2)+I(mean_dist_km^3) +
-                I(dist_to_coast_mi^2)+I(dist_to_coast_mi^3) +
-                I(elevation_ft^2))
+```{r, message = FALSE, warning = FALSE, results='hide'}
+det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
+            dist_to_coast_mi + elevation_ft + dominant_eco_group + tmean_2024_C + ppt_2024_mm +
+            I(mean_dist_km^2)+I(mean_dist_km^3) +
+            I(dist_to_coast_mi^2)+I(dist_to_coast_mi^3) +
+            I(elevation_ft^2))
+```
+
 (Keep in mind that what's actually being predicted is logit(det_freq))  
 
 An ANOVA (compared to model w/ no poly terms) shows that the addition of polynomial terms is significant.  
@@ -415,7 +486,6 @@ mod_pwo_glm_full_poly = glm(form_pwo_glm_full_poly,
                             weights = n_checklists,
                             data = ebird_features_df_pwo,
                             family = binomial)
-summary(mod_pwo_glm_full_poly)
 ```
 
 
@@ -433,29 +503,34 @@ I found a no-interaction model and one with some interactions that score roughly
 <br>
 **1. Basic polynomial model after backward selection w/ BIC**:  
 
-    det_freq ~ (mean_start_time_hr + med_duration +
-                mean_dist_km + I(mean_dist_km^2) + I(mean_dist_km^3) + 
-                dist_to_coast_mi + I(dist_to_coast_mi^2)+I(dist_to_coast_mi^3) +
-                elevation_ft + I(elevation_ft^2) +
-                dominant_eco_group)
+```{r, message = FALSE, warning = FALSE, results='hide'}
+det_freq ~ (mean_start_time_hr + med_duration +
+            mean_dist_km + I(mean_dist_km^2) + I(mean_dist_km^3) + 
+            dist_to_coast_mi + I(dist_to_coast_mi^2)+I(dist_to_coast_mi^3) +
+            elevation_ft + I(elevation_ft^2) +
+            dominant_eco_group)
+```
 
 Backward BIC selection removed Tmean, Precipitation, and observer count.
 
 <br>
 **2. "Curated" interactive model after backward selection w/ BIC**
 
-    det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration +
-                mean_dist_km + I(mean_dist_km^2) + I(mean_dist_km^3) +
-                mean_num_observers:mean_start_time_hr + 
-                mean_start_time_hr:mean_dist_km +
-                med_duration:mean_dist_km + 
-                med_duration:I(mean_dist_km^2) + med_duration:I(mean_dist_km^3) + 
-                dist_to_coast_mi + I(dist_to_coast_mi^2) + I(dist_to_coast_mi^3) +
-                elevation_ft + I(elevation_ft^2) +
-                dominant_eco_group + 
-                ppt_2024_mm + 
-                dist_to_coast_mi:ppt_2024_mm + I(dist_to_coast_mi^2):ppt_2024_mm +
-                I(dist_to_coast_mi^3):ppt_2024_mm)
+
+```{r, message = FALSE, warning = FALSE, results='hide'}
+det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration +
+            mean_dist_km + I(mean_dist_km^2) + I(mean_dist_km^3) +
+            mean_num_observers:mean_start_time_hr + 
+            mean_start_time_hr:mean_dist_km +
+            med_duration:mean_dist_km + 
+            med_duration:I(mean_dist_km^2) + med_duration:I(mean_dist_km^3) + 
+            dist_to_coast_mi + I(dist_to_coast_mi^2) + I(dist_to_coast_mi^3) +
+            elevation_ft + I(elevation_ft^2) +
+            dominant_eco_group + 
+            ppt_2024_mm + 
+            dist_to_coast_mi:ppt_2024_mm + I(dist_to_coast_mi^2):ppt_2024_mm +
+            I(dist_to_coast_mi^3):ppt_2024_mm)
+```
 
 
 Backward BIC selection removed Tmean and some effort interaction variables.  
@@ -470,27 +545,98 @@ The more exploration I did, the more direction I saw that the analysis could tak
 
 <br>
 
+
+
+
+
 # Appendix
 
-All the eBird graphs of effort trends
 
+EDA
 
-EDA stuff
+Here is the model I started with, without a response transformation:
 
 ```{r}
-par(mfrow = c(1, 2))
-hist(ebird_features_df_pwo$tmean_2024_C, main = "Annual mean temps (C)")
-hist(ebird_features_df_pwo$ppt_2024_mm, main = "Annual precipitation (mm)")
+mod_add_pwo = lm(det_freq ~ mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
+                        dist_to_coast_mi + elevation_ft + dominant_eco_group +
+                        tmean_2024_C + ppt_2024_mm,
+                data = ebird_features_df_pwo, weight = n_checklists)
+summary(mod_add_pwo)
+get_k10_cv_rmse(formula(mod_add_pwo), ebird_features_df_pwo)
+```
+
+Here are diagnostic plots and test results that signaled that a response transformation was needed:  
+
+```{r}
+qqnorm(resid(mod_add_pwo), col = "red")
+qqline(resid(mod_add_pwo))
+shapiro.test(resid(mod_add_pwo))
+```
+
+```{r}
+plot(resid(mod_add_pwo) ~ fitted(mod_add_pwo), col = "blue")
+lmtest::bptest(mod_add_pwo)
 ```
 
 
+Here is the log(y) model I then tried:
+
+```{r}
+# Using log(y+0.1) transformation. Used offset because there are some 0-detection cells.
+mod_add_pwo_logy = lm(log(det_freq + 0.1) ~ (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
+                        dist_to_coast_mi + elevation_ft + dominant_eco_group +
+                        tmean_2024_C + ppt_2024_mm),
+                data = ebird_features_df_pwo, weight = n_checklists)
+summary(mod_add_pwo_logy)
+```
+
+<br>
+This was informed by the result of a Box-Cox transformation, where the optimum $\lambda$ was around 0:  
+
+```{r}
+mod_add_pwo_shift = lm((det_freq + 0.1) ~ mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
+                     dist_to_coast_mi + elevation_ft + dominant_eco_group +
+                     tmean_2024_C + ppt_2024_mm,
+                     data = ebird_features_df_pwo, weight = n_checklists)
+MASS::boxcox(mod_add_pwo_shift)
+```
 
 
-model w/o transformation
-model w/ log transformation
-glm model w/ logit transformation
+The normality diagnostics looked pretty good for the log(y) transformation. The fitted-vs-residuals plot still looked poor though, especially the nonlinearity indicated by spread not being centered at 0 as fitted value varied:  
+
+```{r}
+qqnorm(resid(mod_add_pwo_logy), col = "red")
+qqline(resid(mod_add_pwo_logy))
+shapiro.test(resid(mod_add_pwo_logy))
+```
+
+```{r}
+plot(resid(mod_add_pwo_logy) ~ fitted(mod_add_pwo_logy), col = "blue")
+lmtest::bptest(mod_add_pwo_logy)
+```
+
+<br>
+
+
+
+Here are some individual eBird effort-predictor trends I found interesting:  
+
+![](output/pileated_2024_num_observers_effect_20251127.png)  
+
+![](output/pileated_2024_time-of-day_effect_20251127.png)  
+
+![](output/pileated_2024_distance-traveled_effect_20251127.png)  
+
+
+
+improvements
 
 transformations
+
+Here are the component + residual plots I evaluated to help me determine which predictor transformations to attempt. I experimented with polynomial terms for any variable with a significant deviation between the line and curve.  
+```{r}
+car::crPlots(mod_pwo_glm_base)
+```
 
 show plots and graphs of the most interesting things you found.
 
