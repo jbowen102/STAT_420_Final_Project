@@ -27,10 +27,11 @@ I used a composite dataset for my project. The primary source of my data is the 
 
 Each entry/row of the eBird dataset includes fields/columns for species of bird observed, number of individuals observed, date, time, location, and many more.  
 I then compiled habitat-related data from several other data sources:  
-- Elevation data using the [`elevatr` R package from the US EPA](https://github.com/USEPA/elevatr)  
-- Distance to the nearest coast from the [NASA Ocean Biology Processing Group](https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/)  
-- Land-cover classifications from the National Land Cover Database  
-- Annual mean temperature and cumulative precipitation using the [`prism`](https://cran.r-project.org/web/packages/prism/index.html) package  
+
+- **Elevation** data using the [`elevatr` R package from the US EPA](https://github.com/USEPA/elevatr)  
+- **Distance to the nearest coast** from the [NASA Ocean Biology Processing Group](https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/)  
+- **Land-cover classifications** from the National Land Cover Database  
+- Annual **mean temperature** and **cumulative precipitation** using the [`prism`](https://cran.r-project.org/web/packages/prism/index.html) package  
 <br>
 
 
@@ -38,7 +39,7 @@ I then compiled habitat-related data from several other data sources:
 
 # Data Curation
 
-I adapted my approach from the [eBird Best Practices Workshop](https://strimas.com/ebp-workshop/) notes and the [Best Practices for Using eBird Data](https://ebird.github.io/ebird-best-practices/) eBook, both written or contributed to by Matthew Strimas-Mackey, a lead contributor to the [auk](https://github.com/CornellLabofOrnithology/auk) package I used to filter and pre-process eBird data.
+I adapted my approach from the [eBird Best Practices Workshop](https://strimas.com/ebp-workshop/) notes and the [Best Practices for Using eBird Data](https://ebird.github.io/ebird-best-practices/) eBook, both written or contributed to by Matthew Strimas-Mackey, a lead contributor to the [`auk`](https://github.com/CornellLabofOrnithology/auk) package I used to filter and pre-process eBird data.
 I followed the preprocessing guidance and read through the inference and modeling sections, gleaning what I could apply to a linear regression model.
 	A unique property of eBird checklist data is the ability to infer null samples by allowing user to assert non-detections, discussed more below.  
 
@@ -67,66 +68,63 @@ I imposed some restrictions to checklists included in the analysis to those that
 
 I can't use individual checklists as the observations because they don't have a useful (numerical) response variable (discussed more in the Appendix). I could build a logistic-regression classifier using success as >0 individuals observed, but I need a numeric response variable. Number of individuals detected on a checklist is "drawing the lines in the wrong place" - one person observing 10 birds will send a different signal to the model than 10 people each observing one bird. I want my model predictions to reflect species occupancy/abundance rather than just checklist "score". Predicting checklist score would also not control for location popularity, making correlation with habitat variables less useful. More popular locations would tend to have better checklist scores than less popular places.
 To get the dataset into a form conducive to a regression analysis, I aggregated over space and time.  
+
 I segmented the state into 10-km hex cells using the `dggridR` package. Looking at the grid overlaid on the state, this seems like a good compromise to provide sufficient data reduction without completely smoothing out local variation.  
-Hex cell count:  732 hex cells
+There are "missing" cells where either no complete checklists were recorded in 2024, or I had to omit that cell due to lack of one or more predictor values available for it (discussed in the Data Cleaning section below). Total hex cell count:  732 hex cells  
 
-![](output/pileated_hex_grid.png)
-
-Then all the checklists from 2024 that fall into a given cell are collected together, and summary statistics are generated to use as that cell's contribution to the dataset.
-The hex cells become the "rows" in the dataset I'll perform regression on.
-Then the response becomes the "detection frequency" - how many complete checklists in 2024 in this area (hex cell) included an observation (any number) of the species of interest.
+<br>
+![](output/pileated_hex_grid_2.png)
+  
+<br>
+All the checklists from 2024 that fall into a given cell are collected together, and summary statistics are generated to use as that cell's contribution to the dataset. The hex cells become the "rows" in the dataset I'll perform regression on. Then the response becomes the "detection frequency" - how many complete checklists in 2024 in this area (hex cell) included an observation (any number) of the species of interest.  
 
 <br>
 
 ## Effort variables from eBird checklists
 
-At the recommendation of the eBird Best Practices doc, I included so-called "effort" variables to account for observers' variation in probability of seeing a species that is present.
-- Number of observers  
-    "The total number of observers participating the sampling event."  
-    Used the mean number of observers as the summary statistic for each hex cell.  
-- Checklist start time (hours after midnight)  
-    "The time observations were initiated."  
-    Used the mean start time as the summary statistic for each hex cell.  
-- Duration (hours)  
-    "The duration of the sampling event."  
-    Used the median duration as the summary statistic for each hex cell.  
-- Distance traveled (km)  
-    "The distance traveled during the sampling event."  
-    [provide graph in appendix supporting this variation]  
-    Used the mean distance traveled as the summary statistic for each hex cell.  
+At the recommendation of the eBird Best Practices documentation, I included so-called "effort" variables to account for observers' variation in probability of seeing a species that is present. Here are the effort variables I included, along with their description from the eBird documentation:  
 
-These effort variables allow my model to account for areas where birders tend to "put in more effort". I'd expect a hex cell in a state park to have higher number of observers, a lower start time, longer duration, and longer distance traveled that a hex cell in suburbia.
+- **Number of observers**: "The total number of observers participating the sampling event"  
+    I used the mean number of observers as the summary statistic for each hex cell.  
 
-Show some of the plots like distance-traveled effect and time of day effect; talk about how that also is expected to correspond to more serious and experienced birders, which will increase detection sensitivity. Having more observers also tends to help, and again, I expect this to be a proxy for a higher (at least average) experience level, and I expect it to be correlated with distance traveled, and group trips tend to start early in the morning for peak detection probability (higher level of bird activity and vocalization). Also commitment level is higher, since observers gathering and creating group checklists takes coordination.
-    Make sure none of these contradicts my correlation findings.
+- **Start time**: "The time observations were initiated" (hours after midnight)  
+    I used the mean start time as the summary statistic for each hex cell.  
 
+- **Duration**: "The duration of the sampling event." (hours)  
+    I used the median duration as the summary statistic for each hex cell.  
+
+- **Distance traveled**: "The distance traveled during the sampling event" (km)  
+    I used the mean distance traveled as the summary statistic for each hex cell.  
+
+These effort variables allow my model to account for locations where birders tend to "put in more effort". I'd expect a hex cell in a state park to have a higher number of observers, a lower start time, longer duration, and longer distance traveled that a hex cell filled with strip malls.  
 
 <br>
 
 ## Habitat Covariates
 
-Instead of using raw GPS lat and long as predictors, I wanted to use more direct and specific locational differences as predictors.
+Instead of using raw GPS coordinates as predictors, I wanted to use more direct and specific locational attributes as predictors, ideally capturing habitat-relevant characteristics. Here are the covariates I chose:  
 
-I looked for data sources that could inform what makes one hex cell on the map different from others, with indicators that I expect bird occupancy to be sensitive to - geography, topology, weather, etc.
+- **Elevation**  
+    I used the `elevatr` R package from the US EPA (https://github.com/USEPA/elevatr) to translate the each hex cell's center latitude and longitude coordinates into elevation above sea level, to serve as a more interesting numerical predictor.
+    I expect this to be constant throughout 2024.  
+- **Distance from the coast** (obviously important for shorebirds, but maybe it matters for other species too?)   
+    I used the NASA Ocean Biology Processing Group's [Distance to the Nearest Coast dataset](https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/) to associate each hex cell's location (lat/long) with distance from the nearest coast. This dataset is a text file NASA makes available for download.
+    I expect this to be constant throughout 2024.  
 
-- Elevation  
-    I used the elevatr R package from the US EPA (https://github.com/USEPA/elevatr) to translate the each hex cell's center latitude and longitude coordinates into elevation above sea level, to serve as a more interesting numerical predictor.
-    I expect this to be constant throughout 2024.
-- Distance from the coast (obviously important for shorebirds, but maybe it matters for other species too?)   
-    I used the NASA Ocean Biology Processing Group's "Distance to the Nearest Coast" dataset (https://oceancolor.gsfc.nasa.gov/resources/docs/distfromcoast/) to associate each hex cell's location (lat/long) with distance from the nearest coast. This dataset is a text file NASA makes available for download.
-    I expect this to be constant throughout 2024.
-- "Land cover" classification  
-    This is something I wasn't familiar with when I started this project.
-    It is basically the type of landscape (forest, wetland, developed, grassland, etc.)
-    I downloaded the 2024 Land Cover (CONUS) data product from [this page](https://www.mrlc.gov/data?f%5B0%5D=project_tax_term_term_parents_tax_term_name%3AAnnual%20NLCD) on the [Multi-Resolution Land Characteristics (MRLC) Consortium site](https://www.mrlc.gov/data/type/land-cover). These data are often called the National Land Cover Database (NLCD) and the USGS contributes to them as well.
-    Land-cover data are captured by both by field survey and analysis of remotely sensed imagery. [Wikipedia](https://en.wikipedia.org/wiki/Land_cover)
+- **Land cover classification**  
+    This is something I wasn't familiar with when I started this project. It is basically the landscape characterization (forest, wetland, developed, grassland, etc.).
+    I downloaded the 2024 Land Cover (CONUS) data product from [this page](https://www.mrlc.gov/data?f%5B0%5D=project_tax_term_term_parents_tax_term_name%3AAnnual%20NLCD) on the [Multi-Resolution Land Characteristics (MRLC) Consortium site](https://www.mrlc.gov/data/type/land-cover). These data are often called the National Land Cover Database (NLCD), and the USGS contributes to them as well.  
+    Land-cover data are captured by both by field survey and analysis of remotely sensed imagery. [[Wikipedia](https://en.wikipedia.org/wiki/Land_cover)]  
     I am making the assumption that this is constant throughout 2024, although for some hex cells, that wont' be true (land gets developed, ecology changes).
-    I used the downloaded land-cover raster to determine for each hex cell, what are the proportions of each land-cover type (so it became several variables). I did some further processing on these data, explained in the Feature Engineering section below.
-- Annual mean temperature  
-    I used the [prism](https://cran.r-project.org/web/packages/prism/index.html) package to download and employ rasters from the Northwest Alliance for Computational Science and Engineering ([NACSE](https://www.nacse.org)), which is part of [Oregon State University](https://www.oregonstate.edu). According to [their website](https://prism.oregonstate.edu/overview/), "To create a continuous weather map across the country, our automated systems collect weather station observations from tens of thousands of reporting stations per day. These observations are fed into a sophisticated computer model called PRISM (Parameter-elevation Regressions on Independent Slopes Model)."
-    For each hex cell, I collected all associated pixels from the annual-mean-temp raster and averaged to create the average temp for that cell in 2024.
+    I used the downloaded land-cover raster to determine for each hex cell, what are the proportions of each land-cover type (so it became several variables). I did some further processing on these data, explained in the Feature Engineering section below.  
+
+- **Annual mean temperature**  
+    I used the [`prism`](https://cran.r-project.org/web/packages/prism/index.html) package to download and employ rasters from the Northwest Alliance for Computational Science and Engineering ([NACSE](https://www.nacse.org)), which is part of [Oregon State University](https://www.oregonstate.edu).  
+    According to [their website](https://prism.oregonstate.edu/overview/), "To create a continuous weather map across the country, our automated systems collect weather station observations from tens of thousands of reporting stations per day. These observations are fed into a sophisticated computer model called PRISM (Parameter-elevation Regressions on Independent Slopes Model)."  
+    For each hex cell, I collected all associated pixels from the annual-mean-temp raster and calculated the average temp for that cell over 2024.
     This variable is pretty coarse since it's averaging over the whole year (through seasons), but I still saw lots of variability (See Exploratory Data Analysis section below).
-- Annual cumulative precipitation  
+
+- **Annual cumulative precipitation**  
     How much rain a hex cell gets (and snow, but mostly rain here in SC)
     This is also acquired from the [PRISM](https://prism.nacse.org/) data.
     For each hex cell, I collected all associated pixels from the annual-precipitation raster and averaged to create the total precipitation for that cell in 2024.
@@ -138,7 +136,8 @@ I looked for data sources that could inform what makes one hex cell on the map d
 
 
 The dataset I used includes 15 different land-cover classes:  
--    11 - "Open Water",  
+
+    11 - "Open Water",  
     21 - "Developed, Open Space",  
     22 - "Developed, Low Intensity",  
     23 - "Developed, Medium Intensity",  
@@ -154,6 +153,7 @@ The dataset I used includes 15 different land-cover classes:
     90 - "Woody Wetlands",  
     95 - "Emergent Herbaceous Wetlands"  
 
+<br>
 I grouped these to simplify a bit, for example mapping all developed subcategories into one. Here are all the mappings:  
 
 |     NLCD categories                                       |     Simplified "ecological group" predictor    |
@@ -171,42 +171,43 @@ This yields seven simplified land-cover categories I'm calling "ecological group
 
 Each hex cell's "dominant ecological group" (categorical variable) was then translated into a dummy/one-hot encoding in the model.
 
+<br>
 This is the final list of predictors to be used:
-    - Checklist average number of observers  
-    - Checklist average start time of day (hours past midnight)  
-    - Checklist median duration  
-    - Checklist average distance traveled  
-    - Distance from coast  
-    - Elevation  
-    - Dominant ecological-group classification ('Forest', 'Agriculture', 'Grassland', 'Wetland', 'Water', 'Developed', 'Shrubland')  
-    - Annual mean temperature  
-    - Annual precipitation  
 
+- Checklist average number of observers  
+- Checklist average start time of day (hours past midnight)  
+- Checklist median duration  
+- Checklist average distance traveled  
+- Distance from coast  
+- Elevation  
+- Dominant ecological-group classification ('Forest', 'Agriculture', 'Grassland', 'Wetland', 'Water', 'Developed', 'Shrubland')  
+- Annual mean temperature  
+- Annual precipitation  
+
+<br>
 All are continuous/numerical except for the ecology classification, which is categorical. Each row represents a cell in the hex grid across the state with its values aggregated over all of 2024 (e.g., precipitation summed for the year, checklist distance traveled averaged over the year).
-The response variable is detection frequency (number of checklists with species observed vs. total number of complete checklists in the hex cell)
+The response variable is detection frequency (number of checklists with species observed vs. total number of complete checklists in the hex cell).
 
 
 <br>
 
 ## Data Cleaning
 
-Converted char columns to factor
-    Dominant ecological group
-    
-Removing N/As from covariates
-    15 out of 732, yielding n=717 as final cell/row count.
-    Don't have temp or precip data for these 15 cells for some reason.
+For data cleaning, I converted the dominant ecological-group character variable to a factor variable.  
+I also removed 15 (out of 732) hex cells as I added habitat covariates. For whatever reason, temp and precip data was unavailable for these 15 cells. This resulted in a final observation/row count of n=717 for the model to fit.  
 
 
 <br>
 
 ## Response transformation
-    Detection frequency is my basic response variable - what proportion of checklists in a hex cell in 2024 included a positive detection of the species. This is a numerical prediction, but its [0-1] range (and "counting" basis) is unconventional for a standard regression model, so it took some experimenting to find an appropriate transformation. I tried a log transformation (consistent w/ the recommendation from a Box-Cox analysis), which improved things somewhat, but ultimately I settled on the logit transformation, ultimately adopting the glm() binomial framework to model my detection rate (but still as a proportion, not binary prediction). All subsequent discussion relates to models this logit-transformed response, unless otherwise specified.
+Detection frequency is my basic response variable - what proportion of checklists in a hex cell in 2024 included a positive detection of the species. This is a numerical prediction, but its [0-1] range (and "counting" basis) is unconventional for a standard regression model, so it took some experimenting to find an appropriate transformation.  
+I tried a log transformation (consistent w/ the recommendation from a Box-Cox analysis), which improved things somewhat, but ultimately I settled on the logit transformation, ultimately adopting the glm() binomial framework to model my detection rate (but still as a proportion, not binary prediction). All subsequent discussion relates to models this logit-transformed response, unless otherwise specified.
 
 
 <br>
 
 # Methods
+
 
 <br>
 
@@ -215,22 +216,212 @@ Removing N/As from covariates
 
 <br>
 
+### Summary statistics
+
+
+<br>
+
+### Collinearity
+
+Tried to avoid with my selection of covariates.
+Used a pairs plot to visualize trends among predictors
+    Dist to coast and elevation very well correlated (looking at pairs plot).
+    This correlation is not present everywhere. Different state (like CA) could be more interesting. SC just happens to be a steady slope from the ocean to the Appalachian mountain range.
+
+
+Used cor() to get an idea of predictors' correlation with the response
+    Effort variables all have higher correlation w/ observations than do the climate or ecology (at least when aggregated annually into hex cells as I did).
+    Distance to coast and elevation 84% correlated.
+    Distance to coast and mean temp -89% correlated.
+        possibly just due to elevation
+    Elev and temp corr coefficient with each other (cor() matrix) is 85%
+    Elev and precip corr coefficient with each other (cor() matrix) is 57%
+
+Partial corr coef, VIF
+    I used the car package's VIF function to evaluate generalized VIF for the base model, and the highest values were for distance to coast, elevation, and mean temp. This makes sense based on the correlation coefficient among them and the obvious (roughly) linear trend in the pairs plot. None are higher than the conventional "high VIF" cutoff of 5 though, so I don't expect they're subject to excessive parameter-estimate variance.
+
+
+I also created variable-added plots for all my numerical predictors, but most looked like noise. The ones with an appreciable slope to the trend line had high-leverage points that seemed to be responsible for that.
+
+Finally, I made new models, omitting individual predictors to see how significance of other predictors changed.
+Noticed that some predictors actually get less significant when certain other predictors are omitted
+    e.g., when removed med_duration, dominant eco groups became less significant.
+    Removing mean_dist_km made mean_num_observers, dist to coast, elevation, precip, and dominant eco group all more significant, so mean_dist_km seems to have collinearity with these other predictors.
+I thought removing elevation or dist to coast would effect each other more; they have second and third highest VIFs, and 84% correlation w/ each other. Since they're also correlated with Tmean though (each pair's corr is >80%), its presence is kept me from seeing much effect when only one removed. When I removed two of any three of elevation, temp, and distance to coast, the significance level of the remaining predictor increased substantially.
+    Each of them becomes highly significant when the others are removed:
+
+|                         |     Pr(>\|t\|)    |     Pr(>\|t\|)    |     Pr(>\|t\|)    |     Pr(>\|t\|)    |     Pr(>\|t\|)    |     Pr(>\|t\|)    |     Pr(>\|t\|)    |
+|-------------------------|-------------------|-------------------|-------------------|-------------------|-------------------|-------------------|-------------------|
+|     dist_to_coast_mi    |     0.28981       |                   |     0.22959       |     0.09093       |                   |                   |     0.00038       |
+|     elevation_ft        |     0.82237       |     0.542068      |                   |     0.45839       |                   |     0.00131       |                   |
+|     tmean_2024_C        |     0.40732       |     0.119541      |     0.27595       |                   |     0.00044       |                   |                   |
+(These were all done w/ additive model and no response transformation, so the values don't reflect my chose base model, but the effect is still valid.)
+
+With dominant eco group removed, temp and precip go from insignificant to very significant. I believe this is due to the ecology changing with elevation (which temp and precip are correlated with).
+
+
+
+
+<br>
+
+### Other
+
+Experimented with different birds (source of response variable)
+    Since I wasn't seeing very high correlations between most habitat predictors and the response, I built models for around a dozen other species in an attempt to see if any showed better correlation with my predictors. Most species yielded a worse multiple R2 (I compared both additive models and models w/ all 2-way interactions), so I stuck with the pileated woodpecker.
+    In my proposal, I planned to use the common raven, but since I chose to analyze only data in SC, and its range in SC is limited, I went with a species that ranges over the whole state.
+
+I experimented with different spatial resolutions to get a feel for the best aggregation unit. I saw higher multiple R2 values with larger cell sizes (20 km better and 5 km worse), but I didn't see any clear changes to the trends, for example the individual response-vs-predictor row in the pairs plot. I decided to leave it at the 10km level since I felt this was the most interesting for my analysis. I suspect the R2 just increased due to less noise and not a real change in predictive value; this is something that could use some more exploration though.
+
+
+I explored high-leverage points and outliers and found that 13% of the data are high-leverage points (using rule of thumb of > 2h̅). A more concerning value is that 27% of (standardized) residuals are > 2, as opposed to the 5% we'd expect for a normal distribution. Using the rule of thumb of Cook's distance > 4/n, I determined ~21% of the data points are "influential". This tells me the model could use some work before being used for real-world inference. The high number of high residuals is matches the heavy tails I saw in the normal Q-Q plot.
+
+I used the car::crPlots() to create component+residual plots and evaluate nonlinear trends in the data. This gave me an idea on what variables could benefit from a transformation (later).
+
+
+
+<br>
+
 ## Full/base model interpretation (no poly or interaction terms)
+
+
+mean_num_observers not significant
+Elevation not significant
+Annual avg temp and precip are not significant.
+    Might lose its predictive value when aggregated over the whole year.
+Significant predictors and interpretation:
+
+|     Start time                 |     Negative    |     Earlier start time   associated w/ higher detection rate                                     |
+|--------------------------------|-----------------|--------------------------------------------------------------------------------------------------|
+|     Duration                   |     Positive    |     Longer checklist   duration associated w/ higher detection rate                              |
+|     Distance                   |     Positive    |     Farther distance   traveled associated w/ higher detection rate                              |
+|     "Developed"   eco group    |     negative    |     associated w/ lower   detection rate                                                         |
+|     "Water"   eco group        |     negative    |     associated w/ lower   detection rate                                                         |
+|     "Wetland"   eco group      |     positive    |     associated w/   higher detection rate      Woody wetlands (class 90) is included in this.    |
+
+10-fold CV RMSE: 0.2350  
+
+I used the `caret` package's `trainControl` and `train` functions to perform 10-fold cross-validation. It splits the rows randomly into 10 groups (folds) and trains the provided model with 9 of the folds then evaluates the model's prediction accuracy using the tenth (held out) fold. Each fold gets a turn as the test fold. The resulting RMSE values are averaged to yield the 10-fold avg RMSE.  
+My binomial model doesn't produce an $R^2$, so I'm using cross-validated RMSE as my judge of model performance.
 
 
 <br>
 
 ## Diagnostics
 
+Linear-regression modeling relies on assumptions that the data being fit will conform to certain patterns - that the relationship between predictors and response will fundamentally be linear (as opposed to quadratic, exponential, etc.), that the errors will be independent/random, that the prediction errors will approximate a normal distribution, and that the variance of the errors will be constant across the range of fitted/predicted values. If any of these assumptions don't hold true, inferences can be invalidated. The regressor may still provide predictive value, but confidence intervals and significance levels for the coefficient estimates are not to be trusted.
+
+To evaluate linearity and equivariance, I used a fitted-vs-residuals plot. I also used the Breusch-Pagan test to assess equivariance.
+To evaluate normality of errors, I used both a normal Q-Q plot and the Shapiro-Wilk test.
+
+Initially, all diagnostics indicated the model lacked linearity, equivariance, and normality of errors.
+The model w/ raw detection frequency as response shows a very heavy right tail on the normal Q-Q plot and a diagonal trend on the fitted-vs-residuals plot. The variance/spread of the residuals is not centered at 0 or constant as the fitted value varies.
+I was able to get a good-looking Q-Q plot and "pass" the Shapiro-Wilk test by transforming my response variable to be the log of raw detection frequency. Unfortunately, it still failed to exhibit homoscedasticity or linearity on the fitted-vs-residuals plot (though it is on-average centered at 0 now). I also tried a reciprocal transformation to hopefully stabilize the variance but with no luck.
+
+After the professor's recommendation, I opted to use the logit transformation on my response variable based on its theoretical underpinning matching my proportion/counting-based variable. This transformation provides a broader quantitative range for the response variable instead of the [0, 1] range detection frequency has.
+Despite rejecting the null hypothesis for both Shapiro-Wilk and Breusch-Pagan tests, the fitted-vs-residuals plot is now centered at ~0 for all fitted values; the spread just decreases with fitted value magnitude. This gives me confidence in the linearity assumption at least, although the variance is still not constant. The normal Q-Q plot also looks more symmetrical that the original one, although it still shows the error distribution has heavy tails.
+
+Since I was unable to transform the model to one with normally-distributed or equal-variance errors, some of my future inferences will be invalid. I'll mostly ignore this from now on for the sake of the assignment and comment on what would be a useful inference, if the LINE assumptions held.
 
 <br>
 
 ## Improvements
 
+Response transformations were discussed in the previous section. I settled on using the logit transformation, and accomplished this by using the glm() function with family set to "binomial". I set up the parameters to output logit(detection frequency) as the response variable.
+
+
+### Predictor transformations
+    I tried second and (second+)third-order polynomial terms for every numerical predictor and kept ones whose inclusion yielded a significant beta parameter in the model. Some polynomial terms even improved the significance level of the main-effect predictor's parameter estimate, indicating lack of flexibility was causing the base predictor to underfit.
+    Next I used 10-fold cross-validation to evaluate whether each additional polynomial term's inclusion helped or hurt the prediction accuracy. This was necessary because of course any additional parameter can only ever help your error/deviance when evaluated against "seen" data, but it could introduce significant variance on unseen data. So I only kept higher-order terms when the cross-validated RMSE was consistently and appreciably below the baseline model (having main-effect predictor variables only).
+    For almost every predictor, adding at least a second-order component seemed to improve significance level(s), but after running each through cross-validation, I only kept polynomial terms for checklist distance traveled, distance from coast, and elevation.
+    I don't want to go higher than third-order because the data is so noisy, I can't imagine it's truly fitting signal. I'm trying to avoid introducing too much complication because it will increase prediction variance.
+    I think in many cases, my interpretation of "significance" is dubious because some LINE assumptions don't hold. So that makes it even more important to let cross-validation guide the component selection.
+    Here is my final model with all chosen polynomial terms included:
+
+    det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
+                dist_to_coast_mi + elevation_ft + dominant_eco_group + tmean_2024_C + ppt_2024_mm +
+                I(mean_dist_km^2)+I(mean_dist_km^3) +
+                I(dist_to_coast_mi^2)+I(dist_to_coast_mi^3) +
+                I(elevation_ft^2))
+(Keep in mind that what's actually being predicted is logit(det_freq))  
+
+ANOVA (compared to model w/ no poly terms) shows that the addition of polynomial terms is significant.  
+10-fold CV RMSE: **0.23152**  
+This model has lower RMSE than the one without polynomial terms.  
+
+
+### Model selection and interaction terms
+
+I chose to use a backward selection procedure with BIC to prune predictors from my model that weren't adding enough value. I chose BIC instead of AIC because I'm more interested in interpretability and gaining insight from the model (what predictors have what effect), rather than pure predictive power, and BIC penalizes more than AIC when n is relatively large (like in my case).  
+
+I started with the model that includes polynomial terms but no interactions then did backward BIC:  
+    Got rid of num observers, temp, precip. Kept all poly terms  
+10-fold CV RMSE: <span style="color:springgreen;">**0.23035**</span> (better)  
+
+ANOVA on the model with all poly terms vs. the model selected using BIC shows that the predictors removed by the stepwise process could be insignificant. This smaller model has basically the same RMSE as before, so it is preferred.
+
+
+Next I took the poly-term + full-interaction model and ran backward BIC on that.  
+10-fold CV RMSE: <span style="color:red;">**0.2636**</span> (worse)  
+The RMSE is worse than what I saw on the model without any interaction terms, so I don't want to use this model. The complexity is causing too much prediction variance.  
+
+Next I took a more measured approach to adding interaction terms. I restricted interactions to only be allowed among certain groups - among the effort variables, and among the habitat variables, but not across the groups. The resulting model was significant according to the ANOVA.  
+Then I ran backward selection procedure with BIC on this. The resulting RMSE was better than before pruning, but worse than before adding the interactions.  
+
+Next I tried a few different models with hand-picked interaction terms, based on what combinations appeared significant in the fully-interactive model (summary output), and what variables tended to survive BIC-based selection procedures.  
+
+I tried a few of these until I got a model that, after backward-BIC selection, improved on the cross-validated RMSE compared to the model without interactions.  
+
+I also tried using LASSO and Ridge regression with poor results.  
+    I used cv.glm() to find the optimal lambda penalty coefficient. I used the one-std-dev-larger lambda value and ran cross-validation with this model. RMSE with either LASSO or Ridge is worse than before (~0.69 instead of ~0.24), so it doesn't seem to be a good choice in this case.  
+
+
 
 <br>
 
 # Conclusion
+
+Found a no-interaction model and one with some interactions that score roughly the same at cross-validated RMSE. All other things being equal, we should prefer the simpler model then.  
+<br>
+**1. Basic polynomial model after backward selection w/ BIC**:  
+
+    det_freq ~ (mean_start_time_hr + med_duration +
+                mean_dist_km + I(mean_dist_km^2) + I(mean_dist_km^3) + 
+                dist_to_coast_mi + I(dist_to_coast_mi^2)+I(dist_to_coast_mi^3) +
+                elevation_ft + I(elevation_ft^2) +
+                dominant_eco_group)
+
+Backward BIC selection removed Tmean, Precipitation, and observer count
+
+<br>
+**2. "Curated" interactive model after backward selection w/ BIC**
+
+    det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration +
+                mean_dist_km + I(mean_dist_km^2) + I(mean_dist_km^3) +
+                mean_num_observers:mean_start_time_hr + 
+                mean_start_time_hr:mean_dist_km +
+                med_duration:mean_dist_km + 
+                med_duration:I(mean_dist_km^2) + med_duration:I(mean_dist_km^3) + 
+                dist_to_coast_mi + I(dist_to_coast_mi^2) + I(dist_to_coast_mi^3) +
+                elevation_ft + I(elevation_ft^2) +
+                dominant_eco_group + 
+                ppt_2024_mm + 
+                dist_to_coast_mi:ppt_2024_mm + I(dist_to_coast_mi^2):ppt_2024_mm +
+                I(dist_to_coast_mi^3):ppt_2024_mm)
+
+
+Backward BIC selection removed Tmean and some effort interaction variables.  
+
+Both of these models achieve a 10-fold cross-validated RMSE of ~ 0.235. This is pretty abismal, considering the full scale of the response variable is 1 (so the model has ~23% error on average).  
+Note that the two best models are not nested, so I can't do a proper ANOVA w/o hierarchy in place.  
+
+A significant part of my time investment was learning how to extract and work with the eBird data extraction, then habitat-data curation and learning how to use all those datasets in R, and then feature engineering to formulate a dataset for regression. Then I spent significant time slicing the hex grids different ways, trying different species, and trying different predictor and response transformations in an attempt to get the predictor-response relationship to conform to the linear-regression assumptions (linearity, independence, normality of errors, and equivariance of errors).  
+
+The more exploration I did, the more direction I saw that the analysis could take - more granular timescale, less granular spatial scale, season-to-season variation, etc. There is certainly more to explore here.  
+
+I'm trying to transition my career to conservation technology, so I used this project as an application, overextending myself a bit and ending up with a not-so-great linear model but learning a lot in the process. Having to work through challenges of a more difficult dataset has helped me see the value in other types of modeling, and how to recognize when a framework isn't working and I need to explore other options (like transforming the reponse with the logit function).  
+
+
+
 
 
 <br>
@@ -239,11 +430,17 @@ Removing N/As from covariates
 
 
 
+
+
+
+
+
+
 <br><br>
 
 ### Setup/packages
 
-I am using the [auk](https://github.com/CornellLabofOrnithology/auk) R package to interface with the EBD dataset.  
+I am using the [`auk`](https://github.com/CornellLabofOrnithology/auk) R package to interface with the EBD dataset.  
 
 ```{r, echo = FALSE}
 options(scipen = 1, digits = 2)
