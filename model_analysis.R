@@ -29,6 +29,18 @@ get_glm_p_scale_rms_error = function(model, df) {
 }
 
 
+get_k10_cv_rmse = function(formula, df) {
+    train_control_k10 <- caret::trainControl(method = "cv", number = 10)
+    mod_add_pwo_cv_fit <- caret::train(
+        form = formula,
+        data = df,
+        weights = n_checklists,
+        method = "lm",
+        trControl = train_control_k10
+     )
+     mod_add_pwo_cv_fit$results[1,"RMSE"]
+}
+
 get_k10_cv_rmse_logy = function(formula, df) {
     train_control_k10 <- caret::trainControl(method = "cv", number = 10, savePredictions = "final")
     mod_add_pwo_logy_cv_fit <- caret::train(

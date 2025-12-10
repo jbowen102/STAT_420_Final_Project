@@ -221,32 +221,6 @@ Detection frequency is my basic response variable - what proportion of checklist
 I tried a log transformation (consistent w/ the recommendation from a Box-Cox analysis), which improved things somewhat, but ultimately I settled on the logit transformation, ultimately adopting the glm() binomial framework to model my detection rate (but still as a proportion, not binary prediction). All subsequent discussion relates to models this logit-transformed response, unless otherwise specified.
 
 
-form_pwo_glm_base = det_freq ~ 
-                    (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
-                     dist_to_coast_mi + elevation_ft + dominant_eco_group +
-                     tmean_2024_C + ppt_2024_mm)
-mod_pwo_glm_base = glm(form_pwo_glm_base,
-                       weights = n_checklists,
-                       data = ebird_features_df_pwo,
-                       family = binomial)
-summary(mod_pwo_glm_base)
-
-get_k10_cv_rmse_glm(form_pwo_glm_base, ebird_features_df_pwo)
-
-# full poly model
-form_pwo_glm_full_poly = det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
-                                     I(mean_dist_km^2)+I(mean_dist_km^3) +
-                                     dist_to_coast_mi +
-                                     I(dist_to_coast_mi^2)+I(dist_to_coast_mi^3) +
-                                     elevation_ft +
-                                     I(elevation_ft^2) +
-                                     dominant_eco_group + tmean_2024_C + ppt_2024_mm)
-mod_pwo_glm_full_poly = glm(form_pwo_glm_full_poly,
-                            weights = n_checklists,
-                            data = ebird_features_df_pwo,
-                            family = binomial)
-summary(mod_pwo_glm_full_poly)
-
 
 
 
@@ -297,6 +271,8 @@ When I removed two of any three of elevation, temp, and distance to coast, the s
 |     elevation_ft        |     0.82237       |     0.542068      |                   |     0.45839       |                   |     0.00131       |                   |
 |     tmean_2024_C        |     0.40732       |     0.119541      |     0.27595       |                   |     0.00044       |                   |                   |
 (These were all done w/ additive model and no response transformation, so the values don't reflect my chose base model, but the effect is still valid.)
+
+![](output/pileated_var_added_plots.png)
 
 
 <br>
@@ -440,18 +416,6 @@ mod_pwo_glm_full_poly = glm(form_pwo_glm_full_poly,
                             data = ebird_features_df_pwo,
                             family = binomial)
 summary(mod_pwo_glm_full_poly)
-
-seed = 42
-get_k10_cv_rmse_glm(form_pwo_base, ebird_features_df_pwo)
-get_k10_cv_rmse_glm(form_pwo_glm_full_poly, ebird_features_df_pwo)
-
-
-n = nrow(ebird_features_df_pwo)
-best_bic_mod_pwo_glm_poly = step(mod_pwo_glm_full_poly, direction = "backward", k = log(n), trace = FALSE)
-summary(best_bic_mod_pwo_glm_poly)
-
-anova(mod_pwo_glm_base, best_bic_mod_pwo_glm_poly)
-
 ```
 
 
@@ -513,53 +477,14 @@ All the eBird graphs of effort trends
 
 EDA stuff
 
-
 ```{r}
-
-get_percent_high_leverage = function(df, model) {
-    n = nrow(df)
-    p = length(coef(model))
-    h_mean = p / n
-    # (h_mean = mean(hatvalues(mod_int_pwo))) # same
-    # high leverage
-    nrow(df[hatvalues(model) > 2*h_mean,])
-    nrow(df[hatvalues(model) > 2*h_mean,]) / n
-}
-
-
-get_percent_outliers = function(df, model) {
-    n = nrow(df)
-    sum(abs(rstandard(model)) > 2) / n
-}
-
-get_percent_high_cooks_distance = function(df, model) {
-    n = nrow(df)
-    # nrow(df[cooks.distance(model) > 4/n,])
-    nrow(df[cooks.distance(model) > 4/n,]) / n
-}
-```
-
-```{r}
-car::crPlots(mod_pwo_glm_base)
+par(mfrow = c(1, 2))
+hist(ebird_features_df_pwo$tmean_2024_C, main = "Annual mean temps (C)")
+hist(ebird_features_df_pwo$ppt_2024_mm, main = "Annual precipitation (mm)")
 ```
 
 
-```{r}
-get_k10_cv_rmse_glm = function(formula, df) {
-    train_control_k10 <- caret::trainControl(method = "cv", number = 10, savePredictions = "final")
-    glm_mod_cv_fit <- caret::train(
-        form = formula,
-        data = df,
-        method = "glm",
-        family = binomial(),
-        weights = n_checklists,
-        trControl = train_control_k10
-    )
-    # RMSE on original detection-frequency scale
-    preds <- glm_mod_cv_fit$pred
-    sqrt(mean((preds$obs - preds$pred)^2)) # This is back in probability space already
-}
-```
+
 
 model w/o transformation
 model w/ log transformation
@@ -570,20 +495,6 @@ transformations
 show plots and graphs of the most interesting things you found.
 
 Box-Cox transformation
-
-
-```{r, qq_plot}
-glm_err = resid(mod_pwo_glm_base)
-qqnorm(glm_err, col = "red")
-qqline(glm_err)
-shapiro.test(glm_err)
-```
-
-```{r}
-plot(resid(best_bic_mod_pwo_glm_poly) ~ fitted(best_bic_mod_pwo_glm_poly), col = "blue")
-lmtest::bptest(best_bic_mod_pwo_glm_poly)
-```
-
 
 
 ## Collinearity
@@ -630,12 +541,6 @@ Challenges with this approach:
 - Practical limitation - I can't afford to pay for all the API queries it would take to associate weather data to the tens of thousands of individual checklist locations and times. I could restrict the scope of my analysis to a small geographic area and/or time, but then the range of each predictor variable will shrink (temp, elevation, etc. ranges will narrow), which I expect will inflate the parameter variance and just make the result less interesting.  
     
 
-
-<br><br>
-
-```{r, add_elevatr_data, message = FALSE, warning = FALSE, eval = FALSE}
-ebd_df_with_elev = add_elev_data(ebd_df)
-```
 
 <br><br>
 
