@@ -118,7 +118,7 @@ These effort variables allow my model to account for locations where birders ten
 Instead of using raw GPS coordinates as predictors, I wanted to use more direct and specific locational attributes as predictors, ideally capturing habitat-relevant characteristics. Here are the covariates I chose:  
 
 - **Elevation**  
-    I used the `elevatr` R package from the US EPA (https://github.com/USEPA/elevatr) to translate the each hex cell's center latitude and longitude coordinates into elevation above sea level, to serve as a more interesting numerical predictor.  
+    I used the [`elevatr` R package from the US EPA](https://github.com/USEPA/elevatr)   to translate the each hex cell's center latitude and longitude coordinates into elevation above sea level, to serve as a more interesting numerical predictor.  
     I expect this to be constant throughout 2024.  
 
 - **Distance from the coast** (obviously important for shorebirds, but maybe it matters for other species too?)   
@@ -146,7 +146,6 @@ Instead of using raw GPS coordinates as predictors, I wanted to use more direct 
 <br>
 
 ## Final Feature Engineering
-
 
 The NLCD dataset I used includes 15 different land-cover classes:  
 
@@ -222,6 +221,35 @@ Detection frequency is my basic response variable - what proportion of checklist
 I tried a log transformation (consistent w/ the recommendation from a Box-Cox analysis), which improved things somewhat, but ultimately I settled on the logit transformation, ultimately adopting the glm() binomial framework to model my detection rate (but still as a proportion, not binary prediction). All subsequent discussion relates to models this logit-transformed response, unless otherwise specified.
 
 
+form_pwo_glm_base = det_freq ~ 
+                    (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
+                     dist_to_coast_mi + elevation_ft + dominant_eco_group +
+                     tmean_2024_C + ppt_2024_mm)
+mod_pwo_glm_base = glm(form_pwo_glm_base,
+                       weights = n_checklists,
+                       data = ebird_features_df_pwo,
+                       family = binomial)
+summary(mod_pwo_glm_base)
+
+get_k10_cv_rmse_glm(form_pwo_glm_base, ebird_features_df_pwo)
+
+# full poly model
+form_pwo_glm_full_poly = det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
+                                     I(mean_dist_km^2)+I(mean_dist_km^3) +
+                                     dist_to_coast_mi +
+                                     I(dist_to_coast_mi^2)+I(dist_to_coast_mi^3) +
+                                     elevation_ft +
+                                     I(elevation_ft^2) +
+                                     dominant_eco_group + tmean_2024_C + ppt_2024_mm)
+mod_pwo_glm_full_poly = glm(form_pwo_glm_full_poly,
+                            weights = n_checklists,
+                            data = ebird_features_df_pwo,
+                            family = binomial)
+summary(mod_pwo_glm_full_poly)
+
+
+
+
 <br>
 
 # Methods
@@ -230,6 +258,7 @@ I tried a log transformation (consistent w/ the recommendation from a Box-Cox an
 <br>
 
 ## Exploratory data analysis
+
 
 
 <br>
@@ -310,22 +339,21 @@ These are the "significant" predictors and my interpretation:
 
 |     Predictor                  |Coefficient Sign |    Interpretation                                                                                |
 |--------------------------------|-----------------|--------------------------------------------------------------------------------------------------|
-|     Start time                 |     Negative    |     Earlier start time   associated w/ higher detection rate                                     |
-|     Duration                   |     Positive    |     Longer checklist   duration associated w/ higher detection rate                              |
-|     Distance                   |     Positive    |     Farther distance   traveled associated w/ higher detection rate                              |
-|     "Developed"   eco group    |     negative    |     associated w/ lower   detection rate                                                         |
-|     "Water"   eco group        |     negative    |     associated w/ lower   detection rate                                                         |
-|     "Wetland"   eco group      |     positive    |     associated w/   higher detection rate      Woody wetlands (class 90) is included in this.    |
+|     Start time                 |     Negative    |     Earlier start time associated w/ higher detection rate                                     |
+|     Duration                   |     Positive    |     Longer checklist duration associated w/ higher detection rate                              |
+|     Distance                   |     Positive    |     Farther distance traveled associated w/ higher detection rate                              |
+|     "Developed"   eco group    |     negative    |     associated w/ lower detection rate                                                         |
+|     "Water"   eco group        |     negative    |     associated w/ lower detection rate                                                         |
+|     "Wetland"   eco group      |     positive    |     associated w/ higher detection rate      Woody wetlands (class 90) is included in this.    |
 
-
-
-
+The sign of each coefficient indicates the relationship "direction", and the magnitude tells us how the response changes from a one-unit change in this predictor (all other predictors held constant).  
+For example, the mean start time increasing by 1 hour will correspond to a decrease in predicted detection frequency of -0.098, or ~10% lower. And a one-mile increase in distance to the coast corresponds to an increased predicted detection frequency of 0.0022, or 0.22%.  
 
 
 10-fold CV RMSE: **0.2350**  
 
 I used the `caret` package's `trainControl` and `train` functions to perform 10-fold cross-validation. It splits the rows randomly into 10 groups (folds) and trains the provided model with 9 of the folds then evaluates the model's prediction accuracy using the tenth (held out) fold. Each fold gets a turn as the test fold. The resulting RMSE values are averaged to yield the 10-fold avg RMSE.  
-My binomial model doesn't produce an $R^2$, so I'm using cross-validated RMSE as my judge of model performance.
+My binomial model doesn't produce an $R^2$, so I'm using cross-validated RMSE as my judge of model performance. (So that you know I know what $R^2$ means, if this model had an multiple $R^2$ of 0.63, that would mean that the predictors account for 63% of the variance in the response. And adjusted $R^2$ includes a penalty to account for model complexity).  
 
 
 <br>
@@ -398,6 +426,40 @@ I also tried using LASSO and Ridge regression with poor results.
 I used `cv.glm()` to find the optimal lambda penalty coefficient. I used the one-std-dev-larger lambda value and ran cross-validation with this model. RMSE with either LASSO or Ridge is worse than before (~0.69 instead of ~0.24), so it doesn't seem to be a good choice in this case.  
 
 
+```{r}
+# full poly model
+form_pwo_glm_full_poly = det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
+                                     I(mean_dist_km^2)+I(mean_dist_km^3) +
+                                     dist_to_coast_mi +
+                                     I(dist_to_coast_mi^2)+I(dist_to_coast_mi^3) +
+                                     elevation_ft +
+                                     I(elevation_ft^2) +
+                                     dominant_eco_group + tmean_2024_C + ppt_2024_mm)
+mod_pwo_glm_full_poly = glm(form_pwo_glm_full_poly,
+                            weights = n_checklists,
+                            data = ebird_features_df_pwo,
+                            family = binomial)
+summary(mod_pwo_glm_full_poly)
+
+seed = 42
+get_k10_cv_rmse_glm(form_pwo_base, ebird_features_df_pwo)
+get_k10_cv_rmse_glm(form_pwo_glm_full_poly, ebird_features_df_pwo)
+
+
+n = nrow(ebird_features_df_pwo)
+best_bic_mod_pwo_glm_poly = step(mod_pwo_glm_full_poly, direction = "backward", k = log(n), trace = FALSE)
+summary(best_bic_mod_pwo_glm_poly)
+
+anova(mod_pwo_glm_base, best_bic_mod_pwo_glm_poly)
+
+```
+
+
+
+
+
+
+
 
 <br>
 
@@ -446,10 +508,111 @@ The more exploration I did, the more direction I saw that the analysis could tak
 
 # Appendix
 
+All the eBird graphs of effort trends
+
+
+EDA stuff
+
+
+```{r}
+
+get_percent_high_leverage = function(df, model) {
+    n = nrow(df)
+    p = length(coef(model))
+    h_mean = p / n
+    # (h_mean = mean(hatvalues(mod_int_pwo))) # same
+    # high leverage
+    nrow(df[hatvalues(model) > 2*h_mean,])
+    nrow(df[hatvalues(model) > 2*h_mean,]) / n
+}
+
+
+get_percent_outliers = function(df, model) {
+    n = nrow(df)
+    sum(abs(rstandard(model)) > 2) / n
+}
+
+get_percent_high_cooks_distance = function(df, model) {
+    n = nrow(df)
+    # nrow(df[cooks.distance(model) > 4/n,])
+    nrow(df[cooks.distance(model) > 4/n,]) / n
+}
+```
+
+```{r}
+car::crPlots(mod_pwo_glm_base)
+```
+
+
+```{r}
+get_k10_cv_rmse_glm = function(formula, df) {
+    train_control_k10 <- caret::trainControl(method = "cv", number = 10, savePredictions = "final")
+    glm_mod_cv_fit <- caret::train(
+        form = formula,
+        data = df,
+        method = "glm",
+        family = binomial(),
+        weights = n_checklists,
+        trControl = train_control_k10
+    )
+    # RMSE on original detection-frequency scale
+    preds <- glm_mod_cv_fit$pred
+    sqrt(mean((preds$obs - preds$pred)^2)) # This is back in probability space already
+}
+```
+
+model w/o transformation
+model w/ log transformation
+glm model w/ logit transformation
+
+transformations
+
+show plots and graphs of the most interesting things you found.
+
+Box-Cox transformation
+
+
+```{r, qq_plot}
+glm_err = resid(mod_pwo_glm_base)
+qqnorm(glm_err, col = "red")
+qqline(glm_err)
+shapiro.test(glm_err)
+```
+
+```{r}
+plot(resid(best_bic_mod_pwo_glm_poly) ~ fitted(best_bic_mod_pwo_glm_poly), col = "blue")
+lmtest::bptest(best_bic_mod_pwo_glm_poly)
+```
+
+
+
+## Collinearity
+
+### pairs plot
 
 
 
 
+## Summary for base model
+
+Show all the relevant figures/tables/plots that lead you from your initial model to the final
+model.
+
+cross-validation result
+
+## Summary for full poly model w/o interaction terms
+
+Show diagnostics and other statistics for final model
+cross-validation result
+
+## Summary for curated, interactive model
+
+## Summary for final BIC-selected model
+
+cross-validation result
+Show diagnostics and other statistics for final model
+
+Show stepwise execution
 
 
 
