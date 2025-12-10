@@ -161,6 +161,23 @@ construct_feature_df = function(ebd_sed_suffix, hex_spacing = 10, save_elev_data
     list("ebird_features_df" = ebird_filtered_agg4, "hex_spatvector" = hex_spatvector)
 }
 
+construct_feature_df_minimal = function(ebd_sed_suffix, hex_spacing = 10, save_elev_data = FALSE) {
+    # Read extracted data back in
+    auk_dfs <- get_auk_extract(paste(ebd_sed_suffix, "txt", sep = "."))
+    ebird_zf_df_filtered <- zerofill_and_clean(auk_dfs$ebd_only_df, auk_dfs$sed_only_df)
+    print("Filtered, zero-filled, and cleaned df:")
+    print(str(ebird_zf_df_filtered))
+    # AGGREGATION using hex grid
+    output <- aggregate_in_cells(ebird_zf_df_filtered, spacing = hex_spacing)
+    ebird_filtered_agg <- output$ebird_df_agg
+    hex_spatvector <- output$hex_spatvector
+    print("Hex-aggregated df:")
+    print(str(ebird_filtered_agg))
+
+    list("ebird_features_df" = ebird_filtered_agg, "hex_spatvector" = hex_spatvector)
+}
+
+
 save_feature_df = function(df, filename) {
     df_out_path = file.path(PROJECT_DIR, "output", "feature_df", filename)
     write_csv(df, df_out_path, na = "")

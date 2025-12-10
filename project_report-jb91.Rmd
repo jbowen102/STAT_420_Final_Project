@@ -7,6 +7,7 @@ output:
     theme: readable
     toc: true
     highlight: zenburn
+    number_sections: true
   pdf_document:
     toc: true
 editor_options:
@@ -15,10 +16,10 @@ editor_options:
 
 <br>
 
-### Introduction
-My goal is to gain insight into how environmental/habitat factors impact detection rates of a specific bird species. The bird species I chose to predict is the pileated woodpecker.
+# Introduction
+My goal is to gain insight into how environmental/habitat factors impact detection rates of a specific bird species, the pileated woodpecker.  
 
-The below map shows the Pileated Woodpecker's range in North America (source: https://www.allaboutbirds.org/guide/Pileated_Woodpecker/maps-range):  
+The below map shows the pileated woodpecker's range in North America (source: https://www.allaboutbirds.org/guide/Pileated_Woodpecker/maps-range):  
 ![](reference/pileated_woodpecker_range_32323421.jpg)  
 <br>  
 
@@ -35,7 +36,7 @@ I then compiled habitat-related data from several other data sources:
 
 <br>
 
-### Data Curation
+# Data Curation
 
 I adapted my approach from the [eBird Best Practices Workshop](https://strimas.com/ebp-workshop/) notes and the [Best Practices for Using eBird Data](https://ebird.github.io/ebird-best-practices/) eBook, both written or contributed to by Matthew Strimas-Mackey, a lead contributor to the [auk](https://github.com/CornellLabofOrnithology/auk) package I used to filter and pre-process eBird data.
 I followed the preprocessing guidance and read through the inference and modeling sections, gleaning what I could apply to a linear regression model.
@@ -44,14 +45,14 @@ I followed the preprocessing guidance and read through the inference and modelin
 
 <br>
 
-#### Citation for eBird data use
+## Citation for eBird data use
 *eBird Basic Dataset. Version: EBD_relSep-2025. Cornell Lab of Ornithology, Ithaca, New York. Sep 2025.*
 (https://science.ebird.org/en/use-ebird-data/citation)  
 
 
 <br>
 
-#### Filtering eBird Data
+## Filtering eBird Data
 
 The current version of the eBird Basic Dataset contains 5,656,350 observations (any bird, all time, anywhere).
 I chose to limit the analysis to my home state of South Carolina and the year 2024 to reduce the dataset to a manageable size while hopefully including enough variation in habitat, weather, and topology.
@@ -62,13 +63,12 @@ I imposed some restrictions to checklists included in the analysis to those that
 
 <br>
 
-#### Aggregation
+## Aggregation
 
-Again, I can't use individual checklists as the observations because they don't have a useful (numerical) response variable. I could build a logistic-regression classifier using success as >0 individuals observed, but I need a numeric response variable. Number of individuals detected on a checklist is "drawing the lines in the wrong place" - one person observing 10 birds will send a different signal to the model than 10 people each observing one bird. I want my model to predict something like species occupancy/abundance rather than checklist score. And predicting checklist score would not control for location popularity, making correlation with climate and habitat variables less useful. More popular locations would tend to have better checklist scores than less popular places.
-To get the dataset into a form conducive to a regression analysis, I aggregated over space and time.
-I segmented the state into 10km hex cells using the dggridR package. Looking at the grid overlaid on the state, this seems like a good compromise to provide sufficient data reduction without completely smoothing out local variation.
-Hex cell count:
-    732 hex cells
+I can't use individual checklists as the observations because they don't have a useful (numerical) response variable (discussed more in the Appendix). I could build a logistic-regression classifier using success as >0 individuals observed, but I need a numeric response variable. Number of individuals detected on a checklist is "drawing the lines in the wrong place" - one person observing 10 birds will send a different signal to the model than 10 people each observing one bird. I want my model predictions to reflect species occupancy/abundance rather than just checklist "score". Predicting checklist score would also not control for location popularity, making correlation with habitat variables less useful. More popular locations would tend to have better checklist scores than less popular places.
+To get the dataset into a form conducive to a regression analysis, I aggregated over space and time.  
+I segmented the state into 10-km hex cells using the `dggridR` package. Looking at the grid overlaid on the state, this seems like a good compromise to provide sufficient data reduction without completely smoothing out local variation.  
+Hex cell count:  732 hex cells
 
 ![](output/pileated_hex_grid.png)
 
@@ -78,7 +78,7 @@ Then the response becomes the "detection frequency" - how many complete checklis
 
 <br>
 
-#### Effort variables from eBird checklists
+## Effort variables from eBird checklists
 
 At the recommendation of the eBird Best Practices doc, I included so-called "effort" variables to account for observers' variation in probability of seeing a species that is present.
 - Number of observers  
@@ -103,7 +103,7 @@ Show some of the plots like distance-traveled effect and time of day effect; tal
 
 <br>
 
-#### Habitat Covariates
+## Habitat Covariates
 
 Instead of using raw GPS lat and long as predictors, I wanted to use more direct and specific locational differences as predictors.
 
@@ -134,11 +134,11 @@ I looked for data sources that could inform what makes one hex cell on the map d
 
 <br>
 
-#### Feature Engineering
+## Feature Engineering
 
 
-The dataset I used includes 15 different land-cover classes:
-    11 - "Open Water",  
+The dataset I used includes 15 different land-cover classes:  
+-    11 - "Open Water",  
     21 - "Developed, Open Space",  
     22 - "Developed, Low Intensity",  
     23 - "Developed, Medium Intensity",  
@@ -154,7 +154,7 @@ The dataset I used includes 15 different land-cover classes:
     90 - "Woody Wetlands",  
     95 - "Emergent Herbaceous Wetlands"  
 
-I aggregated these to simplify a bit, for example mapping all developed subcategories into one. Here are all the mappings:  
+I grouped these to simplify a bit, for example mapping all developed subcategories into one. Here are all the mappings:  
 
 |     NLCD categories                                       |     Simplified "ecological group" predictor    |
 |-----------------------------------------------------------|------------------------------------------------|
@@ -167,11 +167,9 @@ I aggregated these to simplify a bit, for example mapping all developed subcateg
 |     Shrub/Scrub                                           |     Shrubland                                  |
 
 
-This yields seven simplified land-cover categories I'm calling "ecological groups". I summed the land-cover proportions to get a proportion o
+This yields seven simplified land-cover categories I'm calling "ecological groups". I calculated land-cover proportions for each hex cell and stored proportions of each. I could have used the ecological-group proportions themselves as a numerical predictor, but I wanted to convert them into a categorical variable for lower model complexity, and possibly a more interesting result. For example, including the proportion of "Forest" ecology in a regression model predicting woodpecker detections yielded a significant (low p-value) beta parameter, but that's an obvious result. I thought it would be more interesting to see how a cell's dominant ecology classification (largest proportion among its constituent ecological groups) influenced the prediction or added explanatory value.
 
-I could have used the ecological-group proportions present in each cell as numerical predictors, but I wanted to aggregate them into a categorical variable for lower model complexity, and possibly a more interesting result. For example, including the proportion of "Forest" ecology in a regression model predicting woodpecker detections yielded a significant (low p-value) beta parameter, but that's an obvious result. I thought it would be more interesting to see if a hex cell's "dominant" ecology classification (based on the largest proportion among its constituent ecological groups) contributes predictive or explanatory value.
-
-Each hex cell's "dominant ecological group" (categorical variable) then got translated into a dummy/one-hot encoding in the model.
+Each hex cell's "dominant ecological group" (categorical variable) was then translated into a dummy/one-hot encoding in the model.
 
 This is the final list of predictors to be used:
     - Checklist average number of observers  
@@ -190,7 +188,7 @@ The response variable is detection frequency (number of checklists with species 
 
 <br>
 
-#### Data Cleaning
+## Data Cleaning
 
 Converted char columns to factor
     Dominant ecological group
@@ -202,42 +200,42 @@ Removing N/As from covariates
 
 <br>
 
-#### Response transformation
-    Detection frequency is my basic response variable - what proportion of checklists in a hex cell in 2024 included a positive detection of the species. This is a numerical prediction, but its [0-1] range (and "counting" basis) is unconventional for a standard regression model, so it took some experimenting to find an appropriate transformation. I tried a log transformation (consistent w/ the recommendation from a Box-Cox analysis), which improved things somewhat, but ultimately I settled on the logit transformation, using the glm() binomial modeling framework to model my detection rate (not binary). All subsequent discussion relates to models this logit-transformed response, unless otherwise specified.
+## Response transformation
+    Detection frequency is my basic response variable - what proportion of checklists in a hex cell in 2024 included a positive detection of the species. This is a numerical prediction, but its [0-1] range (and "counting" basis) is unconventional for a standard regression model, so it took some experimenting to find an appropriate transformation. I tried a log transformation (consistent w/ the recommendation from a Box-Cox analysis), which improved things somewhat, but ultimately I settled on the logit transformation, ultimately adopting the glm() binomial framework to model my detection rate (but still as a proportion, not binary prediction). All subsequent discussion relates to models this logit-transformed response, unless otherwise specified.
 
 
 <br>
 
-### Methods
+# Methods
 
 <br>
 
-#### Exploratory data analysis
-
-
-<br>
-
-#### Full/base model interpretation (no poly or interaction terms)
+## Exploratory data analysis
 
 
 <br>
 
-#### Diagnostics
+## Full/base model interpretation (no poly or interaction terms)
 
 
 <br>
 
-#### Improvements
+## Diagnostics
 
 
 <br>
 
-### Conclusion
+## Improvements
 
 
 <br>
 
-### Appendix
+# Conclusion
+
+
+<br>
+
+# Appendix
 
 
 
