@@ -287,7 +287,7 @@ get_k10_cv_rmse_glm(form_pwo_glm_base, ebird_features_df_pwo)
 I did my best to avoid choosing predictors with very high correlation, but there still ended up being some.  
 I used a pairs plot to visualize trends among predictors, and saw that distance to coast and elevation were very well correlated.  This correlation is not uniform everywhere in the country. SC has a relatively steady slope from the ocean to the Appalachian mountain range, but a different state (like CA) could show a more interesting relationship.  
 
-I then used `cor()` to get an idea of individual predictors' correlation magnitude with each other the response. I found the effort variables all have higher correlation w/ the response (detection frequencey) than do the climate or ecology (at least when aggregated annually into hex cells as I did).  
+I then used `cor()` to get an idea of individual predictors' correlation magnitude with each other the response (see table in Appendix). I found the effort variables all have higher correlation w/ the response (detection frequencey) than do the climate or ecology (at least when aggregated annually into hex cells as I did).  
 Distance to coast and elevation have a correlation coefficient of 84%. Elevation and mean temp have a -85% correlation, meaning that the yearly average temp tends to decrease with distance from the coast, as one would expect.  
 Elevation and precipitation have a correlation coefficient of 57%, indicating that higher elevations tend to have higher precipitation.  
 
@@ -313,10 +313,11 @@ When I removed two of any three of elevation, temp, and distance to coast, the s
 |     dist_to_coast_mi    |     0.28981       |                   |     0.22959       |     0.09093       |                   |                   |     0.00038       |
 |     elevation_ft        |     0.82237       |     0.542068      |                   |     0.45839       |                   |     0.00131       |                   |
 |     tmean_2024_C        |     0.40732       |     0.119541      |     0.27595       |                   |     0.00044       |                   |                   |
-(These were all done w/ additive model and no response transformation, so the values don't reflect my chose base model, but the effect is still valid.)
 
-
+(These were all done w/ additive model and no response transformation, so the values don't reflect my chose base model, but the effect is still valid.)  
 Here are the variable-added plots, showing relatively low multicollinearity:  
+
+![](output/pileated_var_added_plots.png)
 
 
 <br>
@@ -332,7 +333,7 @@ I explored high-leverage points and outliers and found that ~13% of the data are
 This high number of high residuals matches the heavy tails I saw in the normal Q-Q plot.  
 Using the rule of thumb of Cook's distance > 4/n, I determined ~21% of the data points are "influential". This tells me the model could use some work before being used for real-world inference.  
 
-I looked at some distributions of differnet predictors to ensure there was enough variation for the model to "fit". Here's an example of the spread of annual average temp and cumulative precipitation:  
+I looked at some distributions of different predictors to ensure there was enough variation for the model to "fit". Here's an example of the spread of annual average temp and cumulative precipitation:  
 
 ```{r}
 par(mfrow = c(1, 2))
@@ -380,7 +381,7 @@ The sign of each coefficient indicates the relationship "direction", and the mag
 For example, the mean start time increasing by 1 hour will correspond to a decrease in predicted detection frequency of -0.098, or ~10% lower. And a one-mile increase in distance to the coast corresponds to an increased predicted detection frequency of 0.0022, or 0.22%.  
 
 
-10-fold CV RMSE: **0.2350**  
+10-fold CV RMSE: **0.2324**  
 
 I used the `caret` package's `trainControl` and `train` functions to perform 10-fold cross-validation. It splits the rows randomly into 10 groups (folds) and trains the provided model with 9 of the folds then evaluates the model's prediction accuracy using the tenth (held out) fold. Each fold gets a turn as the test fold. The resulting RMSE values are averaged to yield the 10-fold avg RMSE.  
 My binomial model doesn't produce an $R^2$, so I'm using cross-validated RMSE as my judge of model performance. (So that you know I know what $R^2$ means, if this model had an multiple $R^2$ of 0.63, that would mean that the predictors account for 63% of the variance in the response. And adjusted $R^2$ includes a penalty to account for model complexity).  
@@ -422,59 +423,18 @@ Since I was unable to transform the model to one with normally-distributed or eq
 
 ## Improvements
 
-Response transformations were discussed in the previous section. I settled on using the logit transformation, and accomplished this by using the `glm()` function with family set to "binomial". I set up the parameters to output logit(detection frequency) as the response variable.  
+Response transformations were discussed in a previous section. I settled on using the logit transformation, and accomplished this by using the `glm()` function with family set to "binomial". I set up the parameters to output logit(detection frequency) as the response variable.  
 
 
 ### Predictor transformations
-I tried second and (second+)third-order polynomial terms for every numerical predictor and kept ones whose inclusion yielded a significant beta parameter in the resulting model. Some polynomial terms even improved the significance level of the main-effect predictor's parameter estimate, indicating lack of flexibility was causing the base predictor to underfit.  
+I tried second and (second+)third-order polynomial terms for every numerical predictor and kept ones whose inclusion yielded a significant $\beta$ estimator in the resulting model. Some polynomial terms even improved the significance level of the main-effect predictor's parameter estimate, indicating lack of flexibility was causing the base predictor to underfit.  
 Next I used 10-fold cross-validation to evaluate whether each additional polynomial term's inclusion helped or hurt the prediction accuracy. This was necessary because additional parameters can only ever help the error/deviance when evaluated against "seen" data, but it could introduce significant variance on unseen data. So I only kept higher-order terms when the cross-validated RMSE was consistently and appreciably below the baseline model (having main-effect predictor variables only).  
 For almost every predictor, adding at least a second-order component seemed to improve significance level(s), but after running each through cross-validation, I only kept polynomial terms for checklist distance traveled, distance from coast, and elevation.
 I don't want to go higher than third-order because the data is so noisy, the additional does not appear to truly be fitting any signal. I'm also trying to avoid introducing too much complexity because it will increase prediction variance.  
-I think in many cases, my interpretation of "significance" is dubious because some LINE assumptions don't hold. So that makes it even more important to let cross-validation guide the component selection.  
-Here is my final model with all chosen polynomial terms included:  
+I think in many cases, interpretation of "significance" based on the hypothesis test is dubious because some LINE assumptions don't hold, so that makes it even more important to let cross-validation guide the component selection.  
+Here is the model with all chosen polynomial terms included:  
 
 ```{r, message = FALSE, warning = FALSE, results='hide'}
-det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
-            dist_to_coast_mi + elevation_ft + dominant_eco_group + tmean_2024_C + ppt_2024_mm +
-            I(mean_dist_km^2)+I(mean_dist_km^3) +
-            I(dist_to_coast_mi^2)+I(dist_to_coast_mi^3) +
-            I(elevation_ft^2))
-```
-
-(Keep in mind that what's actually being predicted is logit(det_freq))  
-
-An ANOVA (compared to model w/ no poly terms) shows that the addition of polynomial terms is significant.  
-10-fold CV RMSE: **0.23152**  
-This model has lower RMSE than the one without polynomial terms.  
-
-
-### Model selection and interaction terms
-
-I chose to use a backward selection procedure with BIC to prune predictors from my model that weren't adding enough value. I chose BIC instead of AIC because I'm more interested in interpretability and gaining insight from the model (what predictors have what effect), rather than pure predictive power, and BIC penalizes more than AIC when n is relatively large (like in my case).  
-
-I started with the model that includes polynomial terms but no interactions then did backward BIC. The selection procedure got rid of number of observers, temp, and precip, but it kept all polynomial terms.  
-10-fold CV RMSE: <span style="color:springgreen;">**0.23035**</span> (better)  
-
-An ANOVA on the model with all poly terms vs. the model selected using BIC shows that the predictors removed by the stepwise process are likely insignificant. This smaller model has basically the same RMSE as before, so it is preferred.  
-
-Next I took the poly-term + full-interaction model and ran backward BIC on that:  
-10-fold CV RMSE: <span style="color:red;">**0.2636**</span> (worse)  
-
-The RMSE is worse than what I saw on the model without any interaction terms, so I don't want to use this model. The complexity is causing too much prediction variance.  
-
-Next I took a more measured approach to adding interaction terms. I restricted interactions to only be allowed among certain groups - among the effort variables, and among the habitat variables, but not across the groups.  
-The resulting model was significant according to the an ANOVA.  
-Then I ran backward selection procedure with BIC on this. The resulting RMSE was better than before pruning, but worse than before adding the interactions.  
-
-Next I tried a few different models with hand-picked interaction terms, based on what combinations appeared significant in the fully-interactive model (summary output), and what variables tended to survive BIC-based selection procedures.  
-I tried a few of these until I got a model that, after backward-BIC selection, performed better in cross-validated RMSE than the model without interactions.  
-
-I also tried using LASSO and Ridge regression with poor results.  
-I used `cv.glm()` to find the optimal lambda penalty coefficient. I used the one-std-dev-larger lambda value and ran cross-validation with this model. RMSE with either LASSO or Ridge is worse than before (~0.69 instead of ~0.24), so it doesn't seem to be a good choice in this case.  
-
-
-```{r}
-# full poly model
 form_pwo_glm_full_poly = det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
                                      I(mean_dist_km^2)+I(mean_dist_km^3) +
                                      dist_to_coast_mi +
@@ -488,11 +448,68 @@ mod_pwo_glm_full_poly = glm(form_pwo_glm_full_poly,
                             family = binomial)
 ```
 
+(Keep in mind that what's actually being predicted is logit(det_freq))  
+
+An ANOVA (compared to model w/ no poly terms) shows that the addition of polynomial terms is significant.  
+10-fold CV RMSE: **`0.2276`** (compared to `0.2324` for base model w/o poly terms)  
+This model has lower RMSE than the one without polynomial terms.  
 
 
+### Model selection and interaction terms
+
+I chose to use a backward selection procedure with BIC to prune predictors from my model that weren't adding enough value. I chose BIC instead of AIC because I'm more interested in interpretability and gaining insight from the model (what predictors have what effect), rather than pure predictive power, and BIC penalizes more than AIC when n is relatively large (like in my case).  
+
+I started with the model that includes polynomial terms but no interactions then did backward BIC. The selection procedure got rid of number of observers, temp, and precip, but it kept all polynomial terms.  
+10-fold CV RMSE: <span style="color:springgreen;">**`0.2276`**</span> (better)  
+
+An ANOVA on the model with all poly terms vs. the model selected using BIC shows that the predictors removed by the stepwise process are likely insignificant. This smaller model has basically the same RMSE as before, so it is preferred.  
+
+Next I took the poly-term + full-interaction model and ran backward BIC on that:  
+10-fold CV RMSE: <span style="color:red;">**`0.3173`**</span> (worse)  
+The RMSE is worse than what I saw on the model without any interaction terms, so I don't want to use this model. The complexity is causing too much prediction variance.  
+
+Next I took a more measured approach to adding interaction terms. I restricted interactions to only be allowed among certain groups - among the effort variables, and among the habitat variables, but not across the groups.  
+The resulting model was significant according to the an ANOVA.  
+10-fold CV RMSE: <span style="color:red;">**`0.2496`**</span> (worse)  
+Then I ran backward selection procedure with BIC on this. The resulting RMSE was better than before pruning, but worse than before adding the interactions.  
+10-fold CV RMSE: <span style="color:red;">**`0.2436`**</span> (worse)  
+
+Next I tried a few different models with hand-picked interaction terms, based on what combinations appeared significant in the fully-interactive model (summary output), and what variables tended to survive BIC-based selection procedures.  
+I tried a few of these until I got a model that, after backward-BIC selection, performed better in cross-validated RMSE than the model without interactions:  
+
+```{r, message = FALSE, warning = FALSE, results='hide'}
+form_pwo_glm_poly_cint3 = det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration +
+                                      mean_dist_km + I(mean_dist_km^2) + I(mean_dist_km^3) +
+                                      mean_num_observers:mean_start_time_hr +
+                                      mean_num_observers:mean_dist_km +
+                                      mean_start_time_hr:mean_dist_km +
+                                      mean_start_time_hr:I(mean_dist_km^2) +
+                                      mean_start_time_hr:I(mean_dist_km^3) + 
+                                      med_duration:mean_dist_km + 
+                                      med_duration:I(mean_dist_km^2) +
+                                      med_duration:I(mean_dist_km^3) +
+                                      dominant_eco_group + 
+                                      dist_to_coast_mi + I(dist_to_coast_mi^2) + I(dist_to_coast_mi^3) + 
+                                      elevation_ft + I(elevation_ft^2) +
+                                      tmean_2024_C +
+                                      ppt_2024_mm + 
+                                      dist_to_coast_mi:ppt_2024_mm + 
+                                      I(dist_to_coast_mi^2):ppt_2024_mm + 
+                                      I(dist_to_coast_mi^3):ppt_2024_mm
+                                      )
+mod_pwo_glm_poly_cint3 = glm(form_pwo_glm_poly_cint3,
+                             weights = n_checklists,
+                             data = ebird_features_df_pwo,
+                             family = binomial)
+```
+
+10-fold CV RMSE: <span style="color:red;">**`0.2318`**</span> (worse)  
+After running backward selection with BIC:  
+10-fold CV RMSE: **`0.2292`** (similar to original no-interaction model)  
 
 
-
+I also tried using LASSO and Ridge regression with poor results.  
+I used `cv.glm()` to find the optimal lambda penalty coefficient. I used the one-std-dev-larger lambda value and ran cross-validation with this model. RMSE with either LASSO or Ridge is worse than before (~0.69 instead of ~0.24), so it doesn't seem to be a good choice in this case.  
 
 
 <br>
@@ -514,8 +531,8 @@ det_freq ~ (mean_start_time_hr + med_duration +
 Backward BIC selection removed Tmean, Precipitation, and observer count.
 
 <br>
-**2. "Curated" interactive model after backward selection w/ BIC**
 
+**2. "Curated" interactive model after backward selection w/ BIC**
 
 ```{r, message = FALSE, warning = FALSE, results='hide'}
 det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration +
@@ -536,8 +553,11 @@ det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration +
 Backward BIC selection removed Tmean and some effort interaction variables.  
 
 <br>
-Both of these models achieve a 10-fold cross-validated RMSE of ~ 0.235. This is pretty abismal, considering the full scale of the response variable is 1 (so the model has ~23% error on average).  
+Both of these models achieve a 10-fold cross-validated RMSE of < 0.230. This is pretty unimpressive, considering the full scale of the response variable is 1 (so the model has ~23% error on average).  
 Note that the two best models are not nested, so I can't do a proper ANOVA w/o hierarchy in place.  
+
+I don't have confidence that this model will provide useful predictive power for detections or bird populations. I think it will take a different approach, probably with different variables, to create something of any explanatory or predictive power.  
+The effort variables provided the most information, but those effects are mostly common across species. I was hoping to learn something more about woodpecker habitat preferences, like that they prefer higher/lower elevations or dislike living near the ocean. I don't see strong enough correlations to make any such inferences.  
 
 A significant part of my time investment was learning how to extract and work with the eBird data extraction, then habitat-data curation and learning how to use all those datasets in R, and then feature engineering to formulate a dataset for regression. Then I spent significant time slicing the hex grids different ways, trying different species, and trying different predictor and response transformations in an attempt to get the predictor-response relationship to conform to the linear-regression assumptions (linearity, independence, normality of errors, and equivariance of errors).  
 
@@ -551,8 +571,17 @@ The more exploration I did, the more direction I saw that the analysis could tak
 
 # Appendix
 
+## Aggregation
 
-EDA
+My original plan was to build a regression model to predict observation count based on conditions and environment - hour of day, weather variables like temp and precip, windspeed, and geographic variables like elevation and distance to coast.
+Challenges with this approach:
+
+- Observation count is how many individual birds a given observer counted. If I use that as the response, a data point where 60 birds were seen by 1 observer will be treated by model as much different than 60 birds seen by 60 observers (60 data points each with 1 bird). What I'm really interested in is number of birds seen in a given area. Observation count doesn't do a great job of that.  
+- Observer "prevalence" needs to be controlled for somehow. Observation count will be high in an area where birders frequent, even if the species is rarely present, whereas another area having rare observers but high bird "occupancy" will look sparse. Detection frequency is how I chose to address this - dividing the number of "positive" checklists (where any number of individuals of the species were observed) by the number of "negative" checklists (checklists w/ no observations of the species). This essentially normalizes the observation count and maps observations to the range [0, 1]. To enable this, I filtered the eBird checklists by those asserted to be "complete" by the user. This mechanism is used to indicate that during the checklist collection, the user recorded every single individual bird they were able to positively identify, allowing non-detections to be inferred. Of course, there's still the issue of failure to detect (a bird being quiet and inconspicuous, a birder being inexperienced, distraction, etc.), but it at least takes out the possibility of the user just not recording the detection, because the species is common/boring for instance.  
+- Practical limitation - I can't afford to pay for all the API queries it would take to associate weather data to the tens of thousands of individual checklist locations and times. I could restrict the scope of my analysis to a small geographic area and/or time, but then the range of each predictor variable will shrink (temp, elevation, etc. ranges will narrow), which I expect will inflate the parameter variance and just make the result less interesting.  
+    
+
+## EDA
 
 Here is the model I started with, without a response transformation:
 
@@ -565,6 +594,7 @@ summary(mod_add_pwo)
 get_k10_cv_rmse(formula(mod_add_pwo), ebird_features_df_pwo)
 ```
 
+<br>
 Here are diagnostic plots and test results that signaled that a response transformation was needed:  
 
 ```{r}
@@ -578,6 +608,7 @@ plot(resid(mod_add_pwo) ~ fitted(mod_add_pwo), col = "blue")
 lmtest::bptest(mod_add_pwo)
 ```
 
+<br>
 
 Here is the log(y) model I then tried:
 
@@ -601,6 +632,7 @@ mod_add_pwo_shift = lm((det_freq + 0.1) ~ mean_num_observers + mean_start_time_h
 MASS::boxcox(mod_add_pwo_shift)
 ```
 
+<br>
 
 The normality diagnostics looked pretty good for the log(y) transformation. The fitted-vs-residuals plot still looked poor though, especially the nonlinearity indicated by spread not being centered at 0 as fitted value varied:  
 
@@ -617,8 +649,42 @@ lmtest::bptest(mod_add_pwo_logy)
 
 <br>
 
+Here are the atypical observations - high leverage points, high std residuals (outliers), and influential points (high Cook's distance):  
+
+```{r}
+get_percent_high_leverage(ebird_features_df_pwo, mod_pwo_glm_base)
+get_percent_outliers(ebird_features_df_pwo, mod_pwo_glm_base)
+get_percent_high_cooks_distance(ebird_features_df_pwo, mod_pwo_glm_base)
+```
 
 
+<br>
+These are all the correlations among the predictors:
+
+```{r}
+cor(select(ebird_features_df_pwo, mean_num_observers, mean_start_time_hr, med_duration, mean_dist_km,
+                        dist_to_coast_mi, elevation_ft,
+                        tmean_2024_C, ppt_2024_mm, det_freq))
+```
+
+<br>
+I used these values and pairs plots as part of my assessment of interaction among predictors:
+
+```{r}
+pairs(ebird_features_df_pwo[c(
+        "mean_num_observers", "mean_start_time_hr", "med_duration", "mean_dist_km", "det_freq"
+        )], pch = ".", col = "blue")
+```
+
+
+```{r}
+pairs(ebird_features_df_pwo[c(
+        "dist_to_coast_mi", "elevation_ft", "dominant_eco_group",
+        "tmean_2024_C", "ppt_2024_mm", "det_freq")], pch = ".", col = "darkgreen")
+```
+
+
+<br>
 Here are some individual eBird effort-predictor trends I found interesting:  
 
 ![](output/pileated_2024_num_observers_effect_20251127.png)  
@@ -628,64 +694,65 @@ Here are some individual eBird effort-predictor trends I found interesting:
 ![](output/pileated_2024_distance-traveled_effect_20251127.png)  
 
 
-
-improvements
-
-transformations
-
+<br>
 Here are the component + residual plots I evaluated to help me determine which predictor transformations to attempt. I experimented with polynomial terms for any variable with a significant deviation between the line and curve.  
 ```{r}
 car::crPlots(mod_pwo_glm_base)
 ```
 
-show plots and graphs of the most interesting things you found.
 
-Box-Cox transformation
-
-
-## Collinearity
-
-### pairs plot
+## Improvements and Model Selection
 
 
 
-
-## Summary for base model
-
-Show all the relevant figures/tables/plots that lead you from your initial model to the final
-model.
-
-cross-validation result
-
-## Summary for full poly model w/o interaction terms
 
 Show diagnostics and other statistics for final model
-cross-validation result
 
-## Summary for curated, interactive model
 
-## Summary for final BIC-selected model
-
-cross-validation result
-Show diagnostics and other statistics for final model
-
-Show stepwise execution
+ANOVA results - inline?
 
 
 
 
-Citation for eBird data use:  
+<br>
+Base model
+    Summary
+    10-fold CV RMSE
+    ANOVA
+
+<br>
+Full poly model w/o interaction terms
+    Summary
+    10-fold CV RMSE
+    ANOVA
+
+<br>
+Full poly model w/o interaction terms, after backward-BIC selection
+    Summary
+    10-fold CV RMSE
+    ANOVA
+
+<br>
+Curated, interactive model
+    Summary
+    10-fold CV RMSE
+    ANOVA
+
+<br>
+Curated, interactive model w/o interaction terms, after backward-BIC selection
+    Summary
+    10-fold CV RMSE
+    ANOVA
+
+
+
+<br>
+
+
+## Citation for eBird data use:  
 *eBird Basic Dataset. Version: EBD_relSep-2025. Cornell Lab of Ornithology, Ithaca, New York. Sep 2025.*
 (https://science.ebird.org/en/use-ebird-data/citation)  
 
-
-My original plan was to build a regression model to predict observation count based on conditions and environment - hour of day, weather variables like temp and precip, windspeed, and geographic variables like elevation and distance to coast.
-Challenges with this approach:
-
-- Observation count is how many individual birds a given observer counted. If I use that as the response, a data point where 60 birds were seen by 1 observer will be treated by model as much different than 60 birds seen by 60 observers (60 data points each with 1 bird). What I'm really interested in is number of birds seen in a given area. Observation count doesn't do a great job of that.  
-- Observer "prevalence" needs to be controlled for somehow. Observation count will be high in an area where birders frequent, even if the species is rarely present, whereas another area having rare observers but high bird "occupancy" will look sparse. Detection frequency is how I chose to address this - dividing the number of "positive" checklists (where any number of individuals of the species were observed) by the number of "negative" checklists (checklists w/ no observations of the species). This essentially normalizes the observation count and maps observations to the range [0, 1]. To enable this, I filtered the eBird checklists by those asserted to be "complete" by the user. This mechanism is used to indicate that during the checklist collection, the user recorded every single individual bird they were able to positively identify, allowing non-detections to be inferred. Of course, there's still the issue of failure to detect (a bird being quiet and inconspicuous, a birder being inexperienced, distraction, etc.), but it at least takes out the possibility of the user just not recording the detection, because the species is common/boring for instance.  
-- Practical limitation - I can't afford to pay for all the API queries it would take to associate weather data to the tens of thousands of individual checklist locations and times. I could restrict the scope of my analysis to a small geographic area and/or time, but then the range of each predictor variable will shrink (temp, elevation, etc. ranges will narrow), which I expect will inflate the parameter variance and just make the result less interesting.  
-    
 
 
 <br><br>
