@@ -27,8 +27,9 @@ source("model_analysis.R")
 ebird_features_df_pwo <- read_feature_df("features--pile_woodp_2024_us-sc.csv")
 ```
 
-
-<br>
+<div style="page-break-after: always; visibility: hidden"> 
+\pagebreak 
+</div>
 
 # Introduction
 My goal was to gain insight into how environmental/habitat factors impact detection rates of a specific bird species, the pileated woodpecker.  
@@ -87,8 +88,8 @@ There are "missing" cells where either no complete checklists were recorded in 2
 
 <br>
 ![](output/pileated_hex_grid_2.png)
-  
-<br>
+
+
 All the checklists from 2024 that fall into a given cell are collected together, and summary statistics are generated to use as that cell's contribution to the dataset. The hex cells become the "rows" in the dataset I'll perform regression on. Then the response becomes the "detection frequency" - how many complete checklists in 2024 in this area (hex cell) included an observation (any number) of the species of interest.  
 
 <br>
@@ -222,14 +223,11 @@ str(ebird_features_df_pwo[cols])
 
 
 
-<br>
-
-
-
-<br>
+<div style="page-break-after: always; visibility: hidden"> 
+\pagebreak 
+</div>
 
 # Methods
-
 
 <br>
 
@@ -249,6 +247,7 @@ mod_add_pwo = lm(det_freq ~ mean_num_observers + mean_start_time_hr + med_durati
 ```
 
 
+<br>
 It took some experimenting to find an appropriate transformation. I tried a log transformation (consistent w/ the recommendation from a Box-Cox analysis), which improved things somewhat, but ultimately I settled on the logit transformation, ultimately adopting the `glm()` binomial framework to model my detection rate (but still as a proportion, not binary prediction).  
 
 ```{r, message = FALSE, warning = FALSE, results='hide'}
@@ -264,21 +263,6 @@ mod_pwo_glm_base = glm(form_pwo_glm_base,
 
 All subsequent discussion relates to models this logit-transformed response, unless otherwise specified.  See Appendix for more output and graphs supporting this direction.
 
-<br>
-
-### Summary statistics
-
-
-10-fold cross-validation error on base model:
-
-```{r, message = FALSE, warning = FALSE}
-set.seed(42)
-get_k10_cv_rmse_glm(form_pwo_glm_base, ebird_features_df_pwo)
-```
-
-
-
-
 
 <br>
 
@@ -293,14 +277,21 @@ Elevation and precipitation have a correlation coefficient of 57%, indicating th
 
 Next I evaluated the generalized VIF for the base model, and the highest values were for distance to coast, elevation, and mean temp. This makes sense based on the correlation coefficient among them and the roughly linear trend visible in the pairs plot. None are higher than the conventional "high VIF" cutoff of 5 though, so I don't expect excessive parameter-estimate variance.  
 
+ 
+<div style="page-break-after: always; visibility: hidden"> 
+\pagebreak 
+</div>
+
 ```{r}
 car::vif(mod_pwo_glm_base)
 ```
 
+<br>
 I also created variable-added plots for each of my numerical predictors, but most looked like noise. The ones with an appreciable slope to the trend line had high-leverage points that seemed responsible for that.  
 
 ![](output/pileated_var_added_plots.png)
 
+<br>
 Finally, I made new models, omitting individual predictors to see how significance of other predictors changed. I noticed that some predictors actually get less significant when certain other predictors were omitted, e.g., when I removed median checklist duration as a predictor, dominant eco groups became less significant. I haven't been able to make sense of this, but it could be due to invalid model assumptions (linearity or normality of errors, etc.) undermining the hypothesis test's validity.  
 Removing mean_dist_km made mean_num_observers, dist to coast, elevation, precip, and dominant eco group all more significant, so mean_dist_km seems to have collinearity with these other predictors.  
 With dominant eco group removed, temp and precip go from insignificant to very significant. I believe this is due to the ecology changing with elevation (which temp and precip are correlated with).  
@@ -322,16 +313,30 @@ Here are the variable-added plots, showing relatively low multicollinearity:
 
 <br>
 
-### Other
+### Scope Exploration
 
 I spent some time trying different species of birds (source of response variable). Since I wasn't seeing very high correlations between most habitat predictors and the response, I built models for around a dozen other species in an attempt to see if any showed better correlation with my predictors. Models predicting other species detections performed a worse both as additive models and models w/ all 2-way interactions, so I stuck with the pileated woodpecker.
 In my proposal, I planned to use the common raven, but since I chose to analyze only data in SC, and its SC range is limited, I went with a species that ranges over the whole state.  
 
 I also experimented with different spatial resolutions to get a feel for the best aggregation unit. I saw higher correlation with values with larger cell sizes (20 km better and 5 km worse), but I didn't see any clear changes to the trends, for example the individual response-vs-predictor row in the pairs plot. I decided to leave it at the 10km level since I felt this was the most interesting for my analysis. I suspect the correlation just increased due to less noise and not a real change in predictive value; this could use some more exploration though.  
 
-I explored high-leverage points and outliers and found that ~13% of the data are high-leverage points (using rule of thumb of > 2h̅). A more concerning value is that 27% of (standardized) residuals are > 2, as opposed to the 5% we'd expect for a normal distribution.  
+<br>
+
+### Unusual Points
+
+I explored high-leverage points and outliers and found that ~13% of the data are high-leverage points (using rule of thumb of > $2\bar{h}$). A more concerning value is that 27% of (standardized) residuals are > 2, as opposed to the 5% we'd expect for a normal distribution.  
 This high number of high residuals matches the heavy tails I saw in the normal Q-Q plot.  
 Using the rule of thumb of Cook's distance > 4/n, I determined ~21% of the data points are "influential". This tells me the model could use some work before being used for real-world inference.  
+
+```{r}
+get_percent_high_leverage(ebird_features_df_pwo, mod_pwo_glm_base)
+get_percent_outliers(ebird_features_df_pwo, mod_pwo_glm_base)
+get_percent_high_cooks_distance(ebird_features_df_pwo, mod_pwo_glm_base)
+```
+
+<br>
+
+### Various Plotting
 
 I looked at some distributions of different predictors to ensure there was enough variation for the model to "fit". Here's an example of the spread of annual average temp and cumulative precipitation:  
 
@@ -341,7 +346,7 @@ hist(ebird_features_df_pwo$tmean_2024_C, main = "Annual mean temps (C)")
 hist(ebird_features_df_pwo$ppt_2024_mm, main = "Annual precipitation (mm)")
 ```
 
-I also analyzed certain individual trends, like the effect of the eBird-checklist "effort" variables on the detection rate. See the appendix for separate plots of these.  
+I also analyzed certain individual trends, like the effect of the eBird-checklist "effort" variables on the detection rate. See the Appendix for separate plots of these.  
 
 I used the `car::crPlots()` to create component + residual plots and evaluate nonlinear trends in the data. This gave me some indicationn of what variables could benefit from a transformation. See the plots in the Appendix.
 
@@ -381,7 +386,7 @@ The sign of each coefficient indicates the relationship "direction", and the mag
 For example, the mean start time increasing by 1 hour will correspond to a decrease in predicted detection frequency of -0.098, or ~10% lower. And a one-mile increase in distance to the coast corresponds to an increased predicted detection frequency of 0.0022, or 0.22%.  
 
 
-10-fold CV RMSE: **0.2324**  
+10-fold CV RMSE: **`0.2324`**  
 
 I used the `caret` package's `trainControl` and `train` functions to perform 10-fold cross-validation. It splits the rows randomly into 10 groups (folds) and trains the provided model with 9 of the folds then evaluates the model's prediction accuracy using the tenth (held out) fold. Each fold gets a turn as the test fold. The resulting RMSE values are averaged to yield the 10-fold avg RMSE.  
 My binomial model doesn't produce an $R^2$, so I'm using cross-validated RMSE as my judge of model performance. (So that you know I know what $R^2$ means, if this model had an multiple $R^2$ of 0.63, that would mean that the predictors account for 63% of the variance in the response. And adjusted $R^2$ includes a penalty to account for model complexity).  
@@ -405,11 +410,21 @@ After the professor's recommendation, I opted to use the logit transformation on
 Despite rejecting the null hypothesis for both Shapiro-Wilk and Breusch-Pagan tests, the fitted-vs-residuals plot is now centered at ~0 for all fitted values; the spread just decreases with fitted value magnitude. This gives me confidence in the linearity assumption at least, although the variance is still not constant. The normal Q-Q plot also looks more symmetrical that the original one, although it still shows the error distribution has heavy tails.  
 These are the resulting diagnostic plots and test results for the `glm()`/logit-transformed/binomial model:  
 
+ 
+<div style="page-break-after: always; visibility: hidden"> 
+\pagebreak 
+</div>
+
 ```{r}
 qqnorm(resid(mod_pwo_glm_base), col = "red")
 qqline(resid(mod_pwo_glm_base))
 shapiro.test(resid(mod_pwo_glm_base))
 ```
+
+ 
+<div style="page-break-after: always; visibility: hidden"> 
+\pagebreak 
+</div>
 
 ```{r}
 plot(resid(mod_pwo_glm_base) ~ fitted(mod_pwo_glm_base), col = "blue")
@@ -508,16 +523,20 @@ After running backward selection with BIC:
 10-fold CV RMSE: **`0.2292`** (similar to original no-interaction model)  
 
 
-I also tried using LASSO and Ridge regression with poor results.  
-I used `cv.glm()` to find the optimal lambda penalty coefficient. I used the one-std-dev-larger lambda value and ran cross-validation with this model. RMSE with either LASSO or Ridge is worse than before (~0.69 instead of ~0.24), so it doesn't seem to be a good choice in this case.  
+I also tried using LASSO and Ridge regression with poor results. I used `cv.glm()` to find the optimal lambda penalty coefficient. I used the one-std-dev-larger lambda value and ran cross-validation with this model. RMSE with either LASSO or Ridge is worse than before (~0.69 instead of ~0.24), so it doesn't seem to be a good choice in this case.  
 
 
-<br>
+ 
+<div style="page-break-after: always; visibility: hidden"> 
+\pagebreak 
+</div>
 
 # Conclusion
 
 I found a no-interaction model and one with some interactions that score roughly the same at cross-validated RMSE. All other things being equal, we should prefer the simpler model then.  
+
 <br>
+
 **1. Basic polynomial model after backward selection w/ BIC**:  
 
 ```{r, message = FALSE, warning = FALSE, results='hide'}
@@ -530,7 +549,7 @@ det_freq ~ (mean_start_time_hr + med_duration +
 
 Backward BIC selection removed Tmean, Precipitation, and observer count.
 
-<br>
+<br><br>
 
 **2. "Curated" interactive model after backward selection w/ BIC**
 
@@ -565,9 +584,10 @@ The more exploration I did, the more direction I saw that the analysis could tak
 
 <br>
 
-
-
-
+ 
+<div style="page-break-after: always; visibility: hidden"> 
+\pagebreak 
+</div>
 
 # Appendix
 
@@ -580,6 +600,7 @@ Challenges with this approach:
 - Observer "prevalence" needs to be controlled for somehow. Observation count will be high in an area where birders frequent, even if the species is rarely present, whereas another area having rare observers but high bird "occupancy" will look sparse. Detection frequency is how I chose to address this - dividing the number of "positive" checklists (where any number of individuals of the species were observed) by the number of "negative" checklists (checklists w/ no observations of the species). This essentially normalizes the observation count and maps observations to the range [0, 1]. To enable this, I filtered the eBird checklists by those asserted to be "complete" by the user. This mechanism is used to indicate that during the checklist collection, the user recorded every single individual bird they were able to positively identify, allowing non-detections to be inferred. Of course, there's still the issue of failure to detect (a bird being quiet and inconspicuous, a birder being inexperienced, distraction, etc.), but it at least takes out the possibility of the user just not recording the detection, because the species is common/boring for instance.  
 - Practical limitation - I can't afford to pay for all the API queries it would take to associate weather data to the tens of thousands of individual checklist locations and times. I could restrict the scope of my analysis to a small geographic area and/or time, but then the range of each predictor variable will shrink (temp, elevation, etc. ranges will narrow), which I expect will inflate the parameter variance and just make the result less interesting.  
     
+<br>
 
 ## EDA
 
@@ -595,6 +616,7 @@ get_k10_cv_rmse(formula(mod_add_pwo), ebird_features_df_pwo)
 ```
 
 <br>
+
 Here are diagnostic plots and test results that signaled that a response transformation was needed:  
 
 ```{r}
@@ -608,7 +630,8 @@ plot(resid(mod_add_pwo) ~ fitted(mod_add_pwo), col = "blue")
 lmtest::bptest(mod_add_pwo)
 ```
 
-<br>
+<br><br>
+
 
 Here is the log(y) model I then tried:
 
@@ -646,17 +669,6 @@ shapiro.test(resid(mod_add_pwo_logy))
 plot(resid(mod_add_pwo_logy) ~ fitted(mod_add_pwo_logy), col = "blue")
 lmtest::bptest(mod_add_pwo_logy)
 ```
-
-<br>
-
-Here are the atypical observations - high leverage points, high std residuals (outliers), and influential points (high Cook's distance):  
-
-```{r}
-get_percent_high_leverage(ebird_features_df_pwo, mod_pwo_glm_base)
-get_percent_outliers(ebird_features_df_pwo, mod_pwo_glm_base)
-get_percent_high_cooks_distance(ebird_features_df_pwo, mod_pwo_glm_base)
-```
-
 
 <br>
 These are all the correlations among the predictors:
@@ -700,50 +712,132 @@ Here are the component + residual plots I evaluated to help me determine which p
 car::crPlots(mod_pwo_glm_base)
 ```
 
+<br>
 
 ## Improvements and Model Selection
 
-
-
-
-Show diagnostics and other statistics for final model
-
-
-ANOVA results - inline?
-
-
+<br>
+Base model:  
+```{r}
+# base model
+form_pwo_glm_base = det_freq ~ 
+                    (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
+                     dist_to_coast_mi + elevation_ft + dominant_eco_group +
+                     tmean_2024_C + ppt_2024_mm)
+mod_pwo_glm_base = glm(form_pwo_glm_base,
+                       weights = n_checklists,
+                       data = ebird_features_df_pwo,
+                       family = binomial)
+summary(mod_pwo_glm_base)
+set.seed(42)
+get_k10_cv_rmse_glm(form_pwo_glm_base, ebird_features_df_pwo)
+```
 
 
 <br>
-Base model
-    Summary
-    10-fold CV RMSE
-    ANOVA
+Full poly model w/o interaction terms:  
+```{r}
+form_pwo_glm_full_poly = det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration + mean_dist_km +
+                                     I(mean_dist_km^2)+I(mean_dist_km^3) +
+                                     dist_to_coast_mi +
+                                     I(dist_to_coast_mi^2)+I(dist_to_coast_mi^3) +
+                                     elevation_ft +
+                                     I(elevation_ft^2) +
+                                     dominant_eco_group + tmean_2024_C + ppt_2024_mm)
+mod_pwo_glm_full_poly = glm(form_pwo_glm_full_poly,
+                            weights = n_checklists,
+                            data = ebird_features_df_pwo,
+                            family = binomial)
+summary(mod_pwo_glm_full_poly)
+set.seed(42)
+get_k10_cv_rmse_glm(form_pwo_glm_full_poly, ebird_features_df_pwo)
+anova(mod_pwo_glm_base, mod_pwo_glm_full_poly)
+```
 
 <br>
-Full poly model w/o interaction terms
-    Summary
-    10-fold CV RMSE
-    ANOVA
+Addition of polynomial terms is significant.  
+
+Next use backward selection w/ BIC:  
+```{r}
+n = nrow(ebird_features_df_pwo)
+best_bic_mod_pwo_glm_poly = step(mod_pwo_glm_full_poly, direction = "backward", k = log(n), trace = FALSE)
+```
 
 <br>
-Full poly model w/o interaction terms, after backward-BIC selection
-    Summary
-    10-fold CV RMSE
-    ANOVA
+Predictors removed:  
+```{r}
+setdiff(names(coef(mod_pwo_glm_full_poly)), names(coef(best_bic_mod_pwo_glm_poly)))
+```
 
 <br>
-Curated, interactive model
-    Summary
-    10-fold CV RMSE
-    ANOVA
+Get error and see if removed predictors were significant:  
+```{r}
+set.seed(42)
+get_k10_cv_rmse_glm(formula(best_bic_mod_pwo_glm_poly), ebird_features_df_pwo)
+anova(best_bic_mod_pwo_glm_poly, mod_pwo_glm_full_poly)
+```
 
 <br>
-Curated, interactive model w/o interaction terms, after backward-BIC selection
-    Summary
-    10-fold CV RMSE
-    ANOVA
+Depending on significance level, removed predictors may or may not be significant.  
 
+<br>
+This is my "curated" interaction model:  
+```{r}
+# Based on what interaction terms seem the most signficant in first curated-interaction model
+form_pwo_glm_poly_cint3 = det_freq ~ (mean_num_observers + mean_start_time_hr + med_duration +
+                                      mean_dist_km + I(mean_dist_km^2) + I(mean_dist_km^3) +
+                                           mean_num_observers:mean_start_time_hr +
+                                           mean_num_observers:mean_dist_km +
+                                           mean_start_time_hr:mean_dist_km +
+                                           mean_start_time_hr:I(mean_dist_km^2) +
+                                           mean_start_time_hr:I(mean_dist_km^3) + 
+                                           med_duration:mean_dist_km + 
+                                           med_duration:I(mean_dist_km^2) +
+                                           med_duration:I(mean_dist_km^3) +
+                                           dominant_eco_group + 
+                                           dist_to_coast_mi + I(dist_to_coast_mi^2) + I(dist_to_coast_mi^3) + 
+                                           elevation_ft + I(elevation_ft^2) +
+                                           tmean_2024_C +
+                                           ppt_2024_mm + 
+                                           dist_to_coast_mi:ppt_2024_mm + 
+                                           I(dist_to_coast_mi^2):ppt_2024_mm + 
+                                           I(dist_to_coast_mi^3):ppt_2024_mm
+                                           )
+mod_pwo_glm_poly_cint3 = glm(form_pwo_glm_poly_cint3,
+                            weights = n_checklists,
+                            data = ebird_features_df_pwo,
+                            family = binomial)
+summary(mod_pwo_glm_poly_cint3)
+set.seed(42)
+get_k10_cv_rmse_glm(form_pwo_glm_poly_cint3, ebird_features_df_pwo)
+anova(mod_pwo_glm_base, mod_pwo_glm_poly_cint3)
+```
+
+<br>
+Addition of interaction terms is significant.  
+
+Next use backward selection w/ BIC:  
+
+```{r}
+n = nrow(ebird_features_df_pwo)
+best_bic_mod_pwo_glm_poly_cint3 = step(mod_pwo_glm_poly_cint3, direction = "backward", k = log(n), trace = FALSE)
+summary(best_bic_mod_pwo_glm_poly_cint3)
+```
+
+<br>
+Predictors removed:  
+```{r}
+setdiff(names(coef(mod_pwo_glm_full_poly)), names(coef(best_bic_mod_pwo_glm_poly)))
+```
+
+
+<br>
+Get error and see if removed predictors were significant:  
+```{r}
+set.seed(42)
+get_k10_cv_rmse_glm(formula(best_bic_mod_pwo_glm_poly_cint3), ebird_features_df_pwo)
+anova(best_bic_mod_pwo_glm_poly, mod_pwo_glm_poly_cint3)
+```
 
 
 <br>
@@ -756,17 +850,4 @@ Curated, interactive model w/o interaction terms, after backward-BIC selection
 
 
 <br><br>
-
-<br><br>
-
-
-
-
-
-
-
-
-
-
-
 
