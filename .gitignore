@@ -20,6 +20,7 @@ reference/
 source_data/
 temp/
 output/
+submission-*/
 scratch.ods
 *.url
 *.pdf
