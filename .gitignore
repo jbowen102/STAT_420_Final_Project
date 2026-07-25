@@ -1,39 +1,70 @@
+# files
 .~*
-__pycache__/
-*.pyc
-*.out
-
+.ipynb_checkpoints
 .lintr.R
-.ipynb_checkpoints/
 .Rhistory
+.RData
+.databricks
+.DS_Store
+.editorconfig
+.vscode
 
-# Experimental TEST scripts
-*_TEST.py
-# Ignore any file/dir/symlink starting with TEST:
-TEST*
-
-# VS Code workspace
+# file types
+*.py[cod]
+*.out
+*.objs*
 *.code-workspace
-
-# Project-specific
-reference/
-source_data/
-temp/
-output/
-submission-*/
-scratch.ods
+*.db
+*.npy
+*.tar
+*.zip
 *.url
 *.pdf
 *.docx
-*.db
 *.png
 
-*.tar
-*.zip
+# dirs
+*.egg-info/
+.venv/
+__pycache__/
+build/
+dist/
+import/
+export/
+output/
+lo{g,gs}/
+*data/
+plo{t,ts}/
+fi{g,gs}/
+reference*/
+temp/
+bu/
+saved_state/
+
+# Experimental/test/temp/scratch
+*_TEST.{py,ipynb}
+*_TEMP.{py,ipynb}
+*_exp.ipynb
+*scratch.ods
+TEST*
+
+# secret
+secret*.*
+dir_names.*
+
+
+# Project-specific
+# ==============================================
+img*
 *.csv
+*.[xX][lL][sS]*
+*submission-*/
 
 
-# Ignore any file/dir/symlink starting w/ these names:
-reference*
 
-# case-insensitive
+
+
+
+
+
+# https://www.digitalocean.com/community/tools/glob
