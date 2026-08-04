@@ -1,0 +1,9 @@
+
+*python.ipynb linguist-language=Python
+
+*ebird*.ipynb linguis-language=R
+*R_auk*.ipynb linguist-language=R
+report_code.ipynb linguist-language=R
+
+*.html linguist-generated
+*.Rmd linguist-detectable
